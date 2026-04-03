@@ -200,7 +200,20 @@ Beyond point forecasts, we evaluate the quality of predictive distributions usin
 
 Both models are well-calibrated but slightly conservative: their 80% prediction intervals capture 86-89% of actual outcomes. For grid operations, this over-coverage is desirable — an overconfident model that under-covers would lead to inadequate reserve scheduling. Moirai 2.0 produces sharper prediction intervals (3,024 MW width vs 3,295 MW for Chronos-2), despite its 11x smaller model size, reinforcing the finding that model scale offers diminishing returns for this task.
 
-### 4.4 Comparison with International Benchmarks
+### 4.4 Multi-Year Robustness (SE Subsystem, 24h, Chronos-2)
+
+To verify that results are not an artifact of a single favorable test period, we evaluate Chronos-2 on three separate calendar years.
+
+| Test Year | Chronos-2 MAPE | Naive MAPE | Improvement | R² |
+|-----------|---------------|-----------|-------------|-----|
+| 2023 | 1.94% | 5.34% | 64% | 0.95 |
+| 2024 | 1.87% | 5.46% | 66% | 0.95 |
+| 2025 | 1.86% | 5.13% | 64% | 0.96 |
+| **Mean ± Std** | **1.89% ± 0.04%** | **5.31% ± 0.17%** | **65%** | **0.95** |
+
+Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a standard deviation of only 0.04 percentage points. The naive baseline varies more (5.13-5.46%), confirming that foundation model accuracy is robust to year-over-year variation in demand patterns.
+
+### 4.5 Comparison with International Benchmarks
 
 | Benchmark | Region | MAPE | Method | Our Chronos-2 |
 |-----------|--------|------|--------|---------------|
@@ -211,7 +224,7 @@ Both models are well-calibrated but slightly conservative: their 80% prediction 
 | Chronos-2 zero-shot | Singapore | ~1-2% | Zero-shot | 1.86% |
 | Chronos-2 zero-shot | Australia | ~2-4% | Zero-shot | 1.86% |
 
-### 4.5 Analysis
+### 4.6 Analysis
 
 **Model ranking.** On SE, the full ranking is Chronos-2 (1.86%) > Moirai 2.0 (1.93%) > Linear trained (2.26%) > TiRex (2.33%) > Naive (5.13%). The 120M-parameter Chronos-2 leads, but the 11M-parameter Moirai 2.0 is remarkably close (1.93% vs 1.86%), suggesting diminishing returns from model scale for this task.
 
@@ -239,8 +252,7 @@ Our findings suggest that foundation models can serve as strong baseline forecas
 
 1. **Univariate input only.** We use only historical load as input. Operational forecasting systems incorporate weather forecasts, calendar features, economic indicators, and planned outages. Adding exogenous variables would likely improve results further.
 2. **No extreme event analysis.** We do not separately analyze performance during holidays, extreme weather events, or the 2021 water crisis. Foundation models may struggle with distributional shifts not well-represented in their pre-training data.
-3. **Test period.** Our test set covers a single year (the most recent 365 days). Results may vary across years with different economic conditions or weather patterns.
-4. **Simple trained baseline only.** We compare against a trained linear model. A more sophisticated locally-trained model (e.g., N-BEATS, TFT with weather covariates) might close the gap with zero-shot foundation models.
+3. **Simple trained baseline only.** We compare against a trained linear model. A more sophisticated locally-trained model (e.g., N-BEATS, TFT with weather covariates) might close the gap with zero-shot foundation models.
 
 ### 5.3 Future Work
 
@@ -254,7 +266,35 @@ Our findings suggest that foundation models can serve as strong baseline forecas
 
 ## 6. Conclusion
 
-We present the first evaluation of time series foundation models on Brazilian electricity load forecasting. Using publicly available data from ONS, we demonstrate that Chronos-2 achieves 1.86% MAPE on day-ahead forecasting for Brazil's largest subsystem — matching the accuracy of proprietary ISO systems in the US and outperforming trained deep learning models on comparable European grids — without any training on Brazilian data. This result holds across all four Brazilian subsystems (1.67-3.17% MAPE, R² > 0.90). We further show that foundation models dominate at operational horizons (24h-168h) but lose to naive seasonal baselines beyond approximately two weeks, identifying a clear practical boundary for zero-shot deployment. Our results provide evidence that the cross-domain transfer capabilities of foundation models extend to emerging market power systems with distinct characteristics (hydro dependency, southern hemisphere seasonality), suggesting a practical path toward accurate STLF in regions where bespoke model development may be resource-constrained.
+We present the first evaluation of time series foundation models on Brazilian electricity load forecasting. Using publicly available data from ONS, we demonstrate that Chronos-2 achieves 1.86% MAPE on day-ahead forecasting for Brazil's largest subsystem — matching the accuracy of proprietary ISO systems in the US and outperforming trained deep learning models on comparable European grids — without any training on Brazilian data. This result holds across all four Brazilian subsystems (1.67-3.17% MAPE, R² > 0.90) and is stable across three test years (1.89% ± 0.04% MAPE). We further show that foundation models dominate at operational horizons (24h-168h) but lose to naive seasonal baselines beyond approximately two weeks, identifying a clear practical boundary for zero-shot deployment. Our results provide evidence that the cross-domain transfer capabilities of foundation models extend to emerging market power systems with distinct characteristics (hydro dependency, southern hemisphere seasonality), suggesting a practical path toward accurate STLF in regions where bespoke model development may be resource-constrained.
+
+---
+
+## Figures
+
+**Figure 1.** SE subsystem, 24h horizon — 7-day forecast comparison and MAE bar chart.
+![SE 24h](results/benchmark_SE_24h.png)
+
+**Figure 2.** S subsystem (Sul), 24h horizon — foundation models vs naive on Brazil's most variable subsystem.
+![S 24h](results/benchmark_S_24h.png)
+
+**Figure 3.** NE subsystem (Nordeste), 24h horizon.
+![NE 24h](results/benchmark_NE_24h.png)
+
+**Figure 4.** N subsystem (Norte), 24h horizon — smallest subsystem, best MAPE.
+![N 24h](results/benchmark_N_24h.png)
+
+**Figure 5.** SE subsystem, 720h (1 month) horizon — models converge with naive at long horizons.
+![SE 720h](results/benchmark_SE_720h.png)
+
+**Figure 6.** SE subsystem, 24h horizon, test year 2023.
+![SE 24h 2023](results/benchmark_SE_24h_2023.png)
+
+**Figure 7.** SE subsystem, 24h horizon, test year 2024.
+![SE 24h 2024](results/benchmark_SE_24h_2024.png)
+
+**Figure 8.** SE subsystem, 24h horizon, test year 2025.
+![SE 24h 2025](results/benchmark_SE_24h_2025.png)
 
 ---
 
