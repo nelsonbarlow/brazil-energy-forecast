@@ -1,0 +1,15 @@
+# Core
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+tqdm
+torch
+einops
+requests
+
+# Foundation models
+chronos-forecasting
+tirex-ts
+uni2ts
