@@ -6,7 +6,7 @@
 
 ## Abstract
 
-Short-term load forecasting (STLF) is critical for power system operation, particularly in Brazil's hydro-dependent grid where supply uncertainty amplifies the need for accurate demand prediction. We evaluate three state-of-the-art time series foundation models — Chronos-2 (Amazon, 120M parameters), TiRex (NX-AI, 35M), and Moirai 2.0 (Salesforce, 11M) — on day-ahead hourly load forecasting across Brazil's four electrical subsystems using data from ONS (Operador Nacional do Sistema Eletrico). Without any training on Brazilian data, Chronos-2 achieves 1.86% MAPE on the SE (Sudeste) subsystem, matching the accuracy of proprietary ISO forecasting systems in the US (PJM: 1.78-1.98%) and outperforming trained deep learning models on comparable European grids. To our knowledge, this is the first evaluation of time series foundation models on Brazilian electricity load data. Our results suggest that pre-trained foundation models can provide ISO-grade forecasting accuracy for emerging market grids without domain-specific training.
+Short-term load forecasting (STLF) is critical for power system operation, particularly in Brazil's hydro-dependent grid where supply uncertainty amplifies the need for accurate demand prediction. We evaluate three state-of-the-art time series foundation models — Chronos-2 (Amazon, 120M parameters), TiRex (NX-AI, 35M), and Moirai 2.0 (Salesforce, 11M) — on day-ahead hourly load forecasting across Brazil's four electrical subsystems using data from ONS (Operador Nacional do Sistema Eletrico). Without any training on Brazilian data, Chronos-2 achieves 1.86% MAPE on the SE (Sudeste) subsystem, matching the accuracy of proprietary ISO forecasting systems in the US (PJM: 1.78-1.98%) and outperforming both a linear model trained on 5+ years of local data (2.26% MAPE) and trained deep learning models on comparable European grids. To our knowledge, this is the first evaluation of time series foundation models on Brazilian electricity load data. Our results suggest that pre-trained foundation models can provide ISO-grade forecasting accuracy for emerging market grids without domain-specific training.
 
 ---
 
@@ -64,7 +64,7 @@ Each subsystem contains approximately 61,000 hourly observations (7 years x 8,76
 
 ### 2.4 Train/Test Split
 
-We use the most recent 365 days (8,760 hours) as the test set. All preceding data forms the context pool. No training is performed — foundation models are evaluated purely zero-shot.
+We use the most recent 365 days (8,760 hours) as the test set. For foundation models, all preceding data forms the context pool (zero-shot, no training). For the trained baseline, we reserve the 60 days prior to the test set as a validation set, with all remaining data used for training.
 
 ---
 
@@ -82,13 +82,15 @@ Given a context window of H historical hourly load values for a single subsystem
 
 **Moirai 2.0** (Salesforce, 11M parameters). Decoder-only transformer. The smallest model in our evaluation at 11M parameters — 96% smaller than Chronos-2.
 
+**Linear (trained)**. A linear regression model mapping 336 hours (2 weeks) of historical load to the next 24 hours. Trained on 5+ years of ONS data for the target subsystem using Adam optimizer (lr=1e-4), MSE loss, and early stopping on validation loss (patience=30 epochs). This serves as the locally-trained baseline — a simple model with full access to historical Brazilian load data.
+
 **Naive baseline** (same hour, 7 days ago). For each forecast hour, predict the load at the same hour exactly one week prior. This captures weekly seasonality and is a standard baseline in load forecasting literature.
 
 ### 3.3 Evaluation Protocol
 
 - **Rolling forecast**: We step through the test set in 24-hour increments, producing a fresh 24-hour forecast at each step.
-- **Context length**: 720 hours (30 days) of historical load.
-- **Zero-shot**: No model parameters are updated on the ONS data.
+- **Context length**: 720 hours (30 days) for foundation models; 336 hours (2 weeks) for the trained linear model.
+- **Zero-shot**: No foundation model parameters are updated on ONS data. The linear model is trained on the ONS training set.
 - **Metrics**: MAE (MW), RMSE (MW), MAPE (%), MASE (seasonality=24), RMSSE (seasonality=24), R².
 
 ### 3.4 Infrastructure
@@ -101,12 +103,13 @@ All experiments run on a Mac Mini M4 with 24GB unified memory. No GPU required �
 
 ### 4.1 SE Subsystem (Sudeste)
 
-| Model | MAE (MW) | RMSE (MW) | MAPE | MASE | RMSSE | R² |
-|-------|----------|-----------|------|------|-------|-----|
-| Naive (7d ago) | 2,264 | 3,027 | 5.13% | 0.89 | 0.81 | 0.77 |
-| Chronos-2 | **829** | **1,318** | **1.86%** | **0.33** | **0.35** | **0.96** |
-| Moirai 2.0 | 858 | 1,338 | 1.93% | 0.34 | 0.36 | 0.95 |
-| TiRex | 1,018 | 1,589 | 2.33% | 0.40 | 0.42 | 0.94 |
+| Model | Type | Params | MAE (MW) | RMSE (MW) | MAPE | MASE | RMSSE | R² |
+|-------|------|--------|----------|-----------|------|------|-------|-----|
+| **Chronos-2** | Zero-shot | 120M | **829** | **1,318** | **1.86%** | **0.33** | **0.35** | **0.96** |
+| Moirai 2.0 | Zero-shot | 11M | 858 | 1,338 | 1.93% | 0.34 | 0.36 | 0.95 |
+| Linear | Trained | ~8K | 1,018 | 1,534 | 2.26% | 0.40 | 0.41 | 0.94 |
+| TiRex | Zero-shot | 35M | 1,018 | 1,589 | 2.33% | 0.40 | 0.42 | 0.94 |
+| Naive (7d ago) | Baseline | 0 | 2,264 | 3,027 | 5.13% | 0.89 | 0.81 | 0.77 |
 
 ### 4.2 Cross-Regional Results (All Subsystems, 24h Horizon)
 
@@ -198,9 +201,9 @@ Foundation models dominate at operational horizons (24h-168h) but degrade past t
 
 [TODO: Expand each of these]
 
-**Model ranking.** Chronos-2 > Moirai 2.0 > TiRex > Naive across all metrics on SE. The 120M-parameter Chronos-2 leads, but the 11M-parameter Moirai 2.0 is remarkably close (1.93% vs 1.86%), suggesting diminishing returns from model scale for this task.
+**Model ranking.** On SE, the full ranking is Chronos-2 (1.86%) > Moirai 2.0 (1.93%) > Linear trained (2.26%) > TiRex (2.33%) > Naive (5.13%). The 120M-parameter Chronos-2 leads, but the 11M-parameter Moirai 2.0 is remarkably close (1.93% vs 1.86%), suggesting diminishing returns from model scale for this task.
 
-**Zero-shot vs trained models.** Our zero-shot results match or beat trained models reported in the literature for comparable grid sizes and horizons. This is notable because no hyperparameter tuning, feature engineering, or local data preparation was required.
+**Zero-shot beats trained.** The most striking result is that Chronos-2 (zero-shot, 1.86% MAPE) outperforms a linear model trained on 5+ years of local ONS data (2.26% MAPE) by 18%. Moirai 2.0 (zero-shot, 1.93%) also beats the trained model. This demonstrates that pre-training on diverse global time series provides stronger inductive biases for load forecasting than training on local data alone — at least for simple model architectures. The trained linear model does outperform TiRex (2.26% vs 2.33%), indicating that local training provides some value, but the gap is marginal compared to what pre-training on billions of time points provides.
 
 **Naive baseline strength.** The naive baseline (MAPE 5.13%) is not trivial — it captures the strong weekly seasonality in electricity demand. Foundation models must learn to do better than this, which they clearly do (63% improvement for Chronos-2).
 
@@ -225,7 +228,7 @@ Our findings suggest that foundation models can serve as strong baseline forecas
 1. **Univariate input only.** We use only historical load as input. Operational forecasting systems incorporate weather forecasts, calendar features, economic indicators, and planned outages. Adding exogenous variables would likely improve results further.
 2. **No extreme event analysis.** We do not separately analyze performance during holidays, extreme weather events, or the 2021 water crisis. Foundation models may struggle with distributional shifts not well-represented in their pre-training data.
 3. **Test period.** Our test set covers a single year (the most recent 365 days). Results may vary across years with different economic conditions or weather patterns.
-4. **No comparison with locally-trained models.** We compare only against a naive baseline and international benchmarks. A direct comparison with models trained on ONS data (e.g., LSTM, N-BEATS) would strengthen the findings.
+4. **Simple trained baseline only.** We compare against a trained linear model. A more sophisticated locally-trained model (e.g., N-BEATS, TFT with weather covariates) might close the gap with zero-shot foundation models.
 
 ### 5.3 Future Work
 
