@@ -79,8 +79,12 @@ def evaluate(actual, predicted, model_name):
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
-def load_data(subsystem, test_days=365):
-    """Load processed ONS data for a subsystem, split into train/test."""
+def load_data(subsystem, test_days=365, test_year=None):
+    """Load processed ONS data for a subsystem, split into train/test.
+
+    If test_year is specified (e.g. 2023), test set = that calendar year.
+    Otherwise, test set = last test_days days of the dataset.
+    """
     pattern = os.path.join(PROCESSED_DIR, f'ons_hourly_load_{subsystem.lower()}_*.csv')
     files = glob.glob(pattern)
     if not files:
@@ -101,10 +105,19 @@ def load_data(subsystem, test_days=365):
 
     df = df.sort_values('datetime').reset_index(drop=True)
 
-    # Split: last test_days days as test
-    test_cutoff = df['datetime'].max() - pd.Timedelta(days=test_days)
-    train_df = df[df['datetime'] <= test_cutoff]
-    test_df = df[df['datetime'] > test_cutoff]
+    if test_year:
+        # Test set = specific calendar year
+        test_start = pd.Timestamp(f'{test_year}-01-01')
+        test_end = pd.Timestamp(f'{test_year}-12-31 23:00:00')
+        # Only keep data up to end of test year
+        df = df[df['datetime'] <= test_end].reset_index(drop=True)
+        train_df = df[df['datetime'] < test_start]
+        test_df = df[(df['datetime'] >= test_start) & (df['datetime'] <= test_end)]
+    else:
+        # Test set = last N days
+        test_cutoff = df['datetime'].max() - pd.Timedelta(days=test_days)
+        train_df = df[df['datetime'] <= test_cutoff]
+        test_df = df[df['datetime'] > test_cutoff]
 
     return df, train_df, test_df
 
@@ -238,6 +251,8 @@ def main():
                         help='Context window in hours (default: 720 = 30 days)')
     parser.add_argument('--test-days', type=int, default=365,
                         help='Number of days for test set (default: 365)')
+    parser.add_argument('--test-year', type=int, default=None,
+                        help='Use a specific calendar year as test set (e.g. 2023)')
     parser.add_argument('--device', type=str, default=None,
                         help='Force device (cuda/mps/cpu)')
     args = parser.parse_args()
@@ -257,16 +272,17 @@ def main():
     print(f'Models: {", ".join(args.models)}')
 
     # Load data
-    df, train_df, test_df = load_data(args.subsystem, args.test_days)
+    df, train_df, test_df = load_data(args.subsystem, args.test_days, args.test_year)
     full_load = df['load_mw'].values
     test_start_idx = len(train_df)
     test_actuals = full_load[test_start_idx:]
     test_dates = df['datetime'].values[test_start_idx:]
     test_len = len(test_actuals)
 
+    test_label = str(args.test_year) if args.test_year else f'{args.test_days}d'
     print(f'\nTotal rows: {len(df):,}')
     print(f'Train: {len(train_df):,} rows')
-    print(f'Test:  {test_len:,} rows ({args.test_days} days)')
+    print(f'Test:  {test_len:,} rows ({test_label})')
     print(f'Mean load: {test_actuals.mean():,.0f} MW')
 
     # Run models
@@ -296,18 +312,19 @@ def main():
 
     # Summary table
     print(f'\n{"="*70}')
-    print(f'  RESULTS: {args.subsystem} subsystem, {args.horizon}h horizon')
+    print(f'  RESULTS: {args.subsystem} subsystem, {args.horizon}h horizon, test={test_label}')
     print(f'{"="*70}')
     results_df = pd.DataFrame(all_metrics).T.round(2)
     print(results_df.to_string())
 
     # Save
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    csv_path = os.path.join(OUTPUT_DIR, f'benchmark_{args.subsystem}_{args.horizon}h.csv')
+    suffix = f'{args.subsystem}_{args.horizon}h_{test_label}'
+    csv_path = os.path.join(OUTPUT_DIR, f'benchmark_{suffix}.csv')
     results_df.to_csv(csv_path)
     print(f'\nCSV: {csv_path}')
 
-    chart_path = os.path.join(OUTPUT_DIR, f'benchmark_{args.subsystem}_{args.horizon}h.png')
+    chart_path = os.path.join(OUTPUT_DIR, f'benchmark_{suffix}.png')
     save_chart(all_preds, test_dates, test_actuals, chart_path, args.subsystem)
 
 
