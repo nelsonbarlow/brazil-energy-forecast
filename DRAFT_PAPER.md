@@ -152,14 +152,36 @@ All four subsystems show consistent improvement over the naive baseline.
 
 ### 4.3 Forecast Horizon Sensitivity (SE Subsystem)
 
-[TODO: Fill in after horizon tests complete]
+We evaluate how accuracy degrades as the forecast horizon extends from 24 hours to 30 days.
 
-| Horizon | Naive MAPE | Chronos-2 MAPE | TiRex MAPE | Moirai MAPE |
-|---------|-----------|----------------|------------|-------------|
-| 24h (1 day) | 5.13% | 1.86% | 2.33% | 1.93% |
-| 168h (1 week) | | | | |
-| 336h (2 weeks) | | | | |
-| 720h (1 month) | | | | |
+**MAPE (%) by horizon:**
+
+| Horizon | Naive | Chronos-2 | TiRex | Moirai 2.0 | Best vs Naive |
+|---------|-------|-----------|-------|------------|---------------|
+| 24h (1 day) | 5.13% | **1.86%** | 2.33% | 1.93% | 64% better |
+| 168h (1 week) | 5.13% | **3.59%** | 3.74% | 3.69% | 30% better |
+| 336h (2 weeks) | 5.13% | **4.18%** | 4.23% | 4.41% | 19% better |
+| 720h (1 month) | **5.13%** | 5.69% | 5.17% | 5.76% | Naive wins |
+
+**R² by horizon:**
+
+| Horizon | Naive | Chronos-2 | TiRex | Moirai 2.0 |
+|---------|-------|-----------|-------|------------|
+| 24h | 0.77 | **0.96** | 0.94 | 0.95 |
+| 168h | 0.77 | **0.87** | 0.87 | 0.87 |
+| 336h | 0.77 | **0.83** | 0.82 | 0.81 |
+| 720h | **0.77** | 0.66 | 0.76 | 0.67 |
+
+**MASE by horizon (values > 1.0 indicate worse than naive):**
+
+| Horizon | Chronos-2 | TiRex | Moirai 2.0 |
+|---------|-----------|-------|------------|
+| 24h | 0.33 | 0.40 | 0.34 |
+| 168h | 0.62 | 0.65 | 0.64 |
+| 336h | 0.73 | 0.74 | 0.77 |
+| 720h | **1.02** | 0.91 | **1.03** |
+
+Foundation models dominate at operational horizons (24h-168h) but degrade past the naive crossover point at approximately 2-3 weeks. At 720h (1 month), Chronos-2 and Moirai 2.0 both exceed MASE 1.0, indicating they are formally worse than the naive weekly-repetition baseline. TiRex (MASE 0.91) remains marginally better than naive at this extreme horizon, suggesting that the xLSTM architecture's state-tracking capability may provide an advantage for very long-range forecasting.
 
 ### 4.3 Comparison with International Benchmarks
 
@@ -186,7 +208,9 @@ All four subsystems show consistent improvement over the naive baseline.
 
 **Model ranking consistency.** Chronos-2 (120M params) wins or ties on every subsystem. However, the gap between models is small: on Norte, TiRex (35M params) matches Chronos-2 exactly. Moirai 2.0 (11M params) is consistently within 0.1-0.2% MAPE of Chronos-2, suggesting diminishing returns from model scale. For resource-constrained deployment, the 11M-parameter Moirai may offer the best accuracy-per-parameter tradeoff.
 
-**R² > 0.90 everywhere.** All foundation models explain over 90% of load variance across all four subsystems, confirming that zero-shot transfer is robust and not dependent on subsystem size or geographic characteristics.
+**R² > 0.90 everywhere (at 24h).** All foundation models explain over 90% of load variance across all four subsystems at the 24-hour horizon, confirming that zero-shot transfer is robust and not dependent on subsystem size or geographic characteristics.
+
+**Horizon decay and the naive crossover.** Foundation model accuracy degrades predictably with horizon length (Figure X). At 24h, Chronos-2 achieves 64% lower MAPE than naive; by 168h (1 week) this advantage shrinks to 30%; and at 720h (1 month) the naive baseline wins outright. This crossover occurs because the naive baseline's core assumption — that demand repeats weekly — becomes increasingly accurate at longer horizons where daily noise averages out. Foundation models, generating autoregressively, accumulate error with each step. The practical implication is clear: foundation models are most valuable for operational horizons (day-ahead to week-ahead), while simple seasonal baselines suffice for monthly planning. Notably, TiRex maintains MASE < 1.0 even at 720h, suggesting xLSTM's recurrent state-tracking may be better suited than transformer architectures for very long-range energy forecasting.
 
 ---
 
@@ -215,7 +239,7 @@ Our findings suggest that foundation models can serve as strong baseline forecas
 
 ## 6. Conclusion
 
-We present the first evaluation of time series foundation models on Brazilian electricity load forecasting. Using publicly available data from ONS, we demonstrate that Chronos-2 achieves 1.86% MAPE on day-ahead forecasting for Brazil's largest subsystem — matching the accuracy of proprietary ISO systems in the US and outperforming trained deep learning models on comparable European grids — without any training on Brazilian data. Our results provide evidence that the cross-domain transfer capabilities of foundation models extend to emerging market power systems with distinct characteristics (hydro dependency, southern hemisphere seasonality), suggesting a practical path toward accurate STLF in regions where bespoke model development may be resource-constrained.
+We present the first evaluation of time series foundation models on Brazilian electricity load forecasting. Using publicly available data from ONS, we demonstrate that Chronos-2 achieves 1.86% MAPE on day-ahead forecasting for Brazil's largest subsystem — matching the accuracy of proprietary ISO systems in the US and outperforming trained deep learning models on comparable European grids — without any training on Brazilian data. This result holds across all four Brazilian subsystems (1.67-3.17% MAPE, R² > 0.90). We further show that foundation models dominate at operational horizons (24h-168h) but lose to naive seasonal baselines beyond approximately two weeks, identifying a clear practical boundary for zero-shot deployment. Our results provide evidence that the cross-domain transfer capabilities of foundation models extend to emerging market power systems with distinct characteristics (hydro dependency, southern hemisphere seasonality), suggesting a practical path toward accurate STLF in regions where bespoke model development may be resource-constrained.
 
 ---
 
