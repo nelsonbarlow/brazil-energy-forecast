@@ -6,7 +6,7 @@
 
 ## Abstract
 
-Short-term load forecasting (STLF) is critical for power system operation, particularly in Brazil's hydro-dependent grid where supply uncertainty amplifies the need for accurate demand prediction. We evaluate three state-of-the-art time series foundation models — Chronos-2 (Amazon, 120M parameters), TiRex (NX-AI, 35M), and Moirai 2.0 (Salesforce, 11M) — on day-ahead hourly load forecasting across Brazil's four electrical subsystems using data from ONS (Operador Nacional do Sistema Eletrico). Without any training on Brazilian data, Chronos-2 achieves 1.86% MAPE on the SE (Sudeste) subsystem, matching the accuracy of proprietary ISO forecasting systems in the US (PJM: 1.78-1.98%) and outperforming both a linear model trained on 5+ years of local data (2.26% MAPE) and trained deep learning models on comparable European grids. To our knowledge, this is the first evaluation of time series foundation models on Brazilian electricity load data. Our results suggest that pre-trained foundation models can provide ISO-grade forecasting accuracy for emerging market grids without domain-specific training.
+Short-term load forecasting (STLF) is critical for power system operation, particularly in Brazil's hydro-dependent grid where supply uncertainty amplifies the need for accurate demand prediction. We evaluate three state-of-the-art time series foundation models — Chronos-2 (Amazon, 120M parameters), TiRex (NX-AI, 35M), and Moirai 2.0 (Salesforce, 11M) — on day-ahead hourly load forecasting across Brazil's four electrical subsystems using data from ONS (Operador Nacional do Sistema Eletrico). Without any training on Brazilian data, Chronos-2 achieves 1.86% MAPE on the SE (Sudeste) subsystem, matching the accuracy of proprietary ISO forecasting systems in the US (PJM: 1.78-1.98%) and outperforming N-BEATS (2.14% MAPE), a state-of-the-art deep learning model trained on 5+ years of local data. Fine-tuning Chronos-2 on local data further reduces MAPE to 1.73%, yielding a modest 7% relative improvement that suggests the pre-trained model already captures the dominant demand patterns. To our knowledge, this is the first evaluation of time series foundation models on Brazilian electricity load data. Our results suggest that pre-trained foundation models can provide ISO-grade forecasting accuracy for emerging market grids without domain-specific training.
 
 ---
 
@@ -83,7 +83,9 @@ Given a context window of H historical hourly load values for a single subsystem
 
 **Moirai 2.0** (Salesforce, 11M parameters). Decoder-only transformer. The smallest model in our evaluation at 11M parameters — 96% smaller than Chronos-2.
 
-**Linear (trained)**. A linear regression model mapping 336 hours (2 weeks) of historical load to the next 24 hours. Trained on 5+ years of ONS data for the target subsystem using Adam optimizer (lr=1e-4), MSE loss, and early stopping on validation loss (patience=30 epochs). This serves as the locally-trained baseline — a simple model with full access to historical Brazilian load data.
+**N-BEATS (trained, 7.3M parameters)**. Neural Basis Expansion Analysis for Time Series (Oreshkin et al., 2020), implemented via the Darts library. Configured with 30 stacks, 4 layers per block, 256-wide layers. Trained on 5+ years of ONS data with Adam optimizer (lr=1e-4), MSE loss, ReduceLROnPlateau scheduler, and early stopping (patience=10). Input chunk: 168 hours (1 week), output chunk: 24 hours. This is the primary trained deep learning baseline.
+
+**Linear (trained, ~8K parameters)**. A linear regression model mapping 336 hours (2 weeks) of historical load to the next 24 hours. Trained on the same ONS data with Adam optimizer (lr=1e-4) and early stopping. Serves as a simple trained baseline.
 
 **Naive baseline** (same hour, 7 days ago). For each forecast hour, predict the load at the same hour exactly one week prior. This captures weekly seasonality and is a standard baseline in load forecasting literature.
 
@@ -106,8 +108,10 @@ All experiments run on a Mac Mini M4 with 24GB unified memory. No GPU required �
 
 | Model | Type | Params | MAE (MW) | RMSE (MW) | MAPE | MASE | RMSSE | R² |
 |-------|------|--------|----------|-----------|------|------|-------|-----|
-| **Chronos-2** | Zero-shot | 120M | **829** | **1,318** | **1.86%** | **0.33** | **0.35** | **0.96** |
+| **Chronos-2** | **Fine-tuned** | 120M | **769** | **1,257** | **1.73%** | **0.30** | **0.34** | **0.96** |
+| Chronos-2 | Zero-shot | 120M | 829 | 1,318 | 1.86% | 0.33 | 0.35 | 0.96 |
 | Moirai 2.0 | Zero-shot | 11M | 858 | 1,338 | 1.93% | 0.34 | 0.36 | 0.95 |
+| **N-BEATS** | **Trained** | **7.3M** | **951** | **1,396** | **2.14%** | **0.37** | **0.37** | **0.95** |
 | Linear | Trained | ~8K | 1,018 | 1,534 | 2.26% | 0.40 | 0.41 | 0.94 |
 | TiRex | Zero-shot | 35M | 1,018 | 1,589 | 2.33% | 0.40 | 0.42 | 0.94 |
 | Naive (7d ago) | Baseline | 0 | 2,264 | 3,027 | 5.13% | 0.89 | 0.81 | 0.77 |
@@ -226,9 +230,13 @@ Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a 
 
 ### 4.6 Analysis
 
-**Model ranking.** On SE, the full ranking is Chronos-2 (1.86%) > Moirai 2.0 (1.93%) > Linear trained (2.26%) > TiRex (2.33%) > Naive (5.13%). The 120M-parameter Chronos-2 leads, but the 11M-parameter Moirai 2.0 is remarkably close (1.93% vs 1.86%), suggesting diminishing returns from model scale for this task.
+**Model ranking.** On SE, the full ranking is: Chronos-2 fine-tuned (1.73%) > Chronos-2 zero-shot (1.86%) > Moirai 2.0 zero-shot (1.93%) > N-BEATS trained (2.14%) > Linear trained (2.26%) > TiRex zero-shot (2.33%) > Naive (5.13%).
 
-**Zero-shot beats trained.** The most striking result is that Chronos-2 (zero-shot, 1.86% MAPE) outperforms a linear model trained on 5+ years of local ONS data (2.26% MAPE) by 18%. Moirai 2.0 (zero-shot, 1.93%) also beats the trained model. This demonstrates that pre-training on diverse global time series provides stronger inductive biases for load forecasting than training on local data alone — at least for simple model architectures. The trained linear model does outperform TiRex (2.26% vs 2.33%), indicating that local training provides some value, but the gap is marginal compared to what pre-training on billions of time points provides.
+**Zero-shot beats trained deep learning.** The most striking result is that Chronos-2 zero-shot (1.86% MAPE) outperforms N-BEATS trained on 5+ years of local ONS data (2.14% MAPE) by 13%. N-BEATS is a state-of-the-art deep learning architecture for time series forecasting with 7.3M parameters, trained with early stopping and learning rate scheduling. Even Moirai 2.0 (11M parameters, zero-shot, 1.93%) beats the trained N-BEATS. This demonstrates that pre-training on diverse global time series provides stronger inductive biases for load forecasting than training a dedicated architecture on local data alone.
+
+**Fine-tuning provides modest additional gains.** Fine-tuning Chronos-2 on the ONS training data reduces MAPE from 1.86% to 1.73% — a 7% relative improvement. The modest gain suggests that the pre-trained model already captures the dominant patterns in Brazilian electricity demand, with fine-tuning primarily correcting residual local biases. The optimal fine-tuning configuration was 400 steps at learning rate 1e-5, taking approximately 40 minutes on CPU.
+
+**Model scale vs training paradigm.** The 11M-parameter Moirai 2.0 (zero-shot) outperforms the 7.3M-parameter N-BEATS (trained), despite having comparable model sizes. This suggests that the advantage of foundation models stems from their pre-training paradigm (diverse data at scale) rather than model size alone.
 
 **Naive baseline strength.** The naive baseline (MAPE 5.13%) is not trivial — it captures the strong weekly seasonality in electricity demand. Foundation models must learn to do better than this, which they clearly do (63% improvement for Chronos-2).
 
@@ -252,7 +260,7 @@ Our findings suggest that foundation models can serve as strong baseline forecas
 
 1. **Univariate input only.** We use only historical load as input. Operational forecasting systems incorporate weather forecasts, calendar features, economic indicators, and planned outages. Adding exogenous variables would likely improve results further.
 2. **No extreme event analysis.** We do not separately analyze performance during holidays, extreme weather events, or the 2021 water crisis. Foundation models may struggle with distributional shifts not well-represented in their pre-training data.
-3. **Simple trained baseline only.** We compare against a trained linear model. A more sophisticated locally-trained model (e.g., N-BEATS, TFT with weather covariates) might close the gap with zero-shot foundation models.
+3. **No exogenous-augmented trained baseline.** While we compare against trained N-BEATS and linear models, these use only historical load as input. A model like TFT with weather covariates could potentially close the gap with zero-shot foundation models.
 
 ### 5.3 Future Work
 
