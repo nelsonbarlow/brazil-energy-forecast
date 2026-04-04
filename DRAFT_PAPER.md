@@ -92,7 +92,7 @@ Given a context window of H historical hourly load values for a single subsystem
 
 ### 3.2 Models
 
-**Chronos-2** (Amazon, 120M parameters). Encoder-only transformer pre-trained on 100B+ time points. Uses group attention and provides quantile forecasts. We report the median (0.5 quantile).
+**Chronos-2** (Amazon, 120M parameters). Encoder-only transformer pre-trained on 100B+ time points from diverse domains. Uses group attention and provides quantile forecasts. We report the median (0.5 quantile). **Critically, we verified that neither ONS data nor any Brazilian time series are included in Chronos-2's pre-training corpus** (arXiv:2403.07815, Appendix B; arXiv:2510.15821, Table 6). The closest electricity datasets in its training set are UCI Electricity (Portuguese utility clients), ERCOT (Texas), and Australian demand — none from Brazil or Latin America. This confirms the zero-shot setting.
 
 **TiRex** (NX-AI, 35M parameters). xLSTM-based architecture (extended Long Short-Term Memory). Published at NeurIPS 2025. Notable for achieving state-of-the-art results with far fewer parameters than transformer alternatives.
 
