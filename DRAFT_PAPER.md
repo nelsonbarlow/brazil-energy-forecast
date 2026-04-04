@@ -248,6 +248,20 @@ Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a 
 
 **R² > 0.90 everywhere (at 24h).** All foundation models explain over 90% of load variance across all four subsystems at the 24-hour horizon, confirming that zero-shot transfer is robust and not dependent on subsystem size or geographic characteristics.
 
+**Context length ablation.** We test Chronos-2 with context windows ranging from 24 hours (1 day) to 2,160 hours (90 days) on SE (Figure 10).
+
+| Context | MAPE | MAE (MW) | R² |
+|---------|------|----------|-----|
+| 24h (1 day) | 5.84% | 2,553 | 0.64 |
+| 72h (3 days) | 5.65% | 2,490 | 0.66 |
+| 168h (1 week) | 2.80% | 1,241 | 0.92 |
+| 336h (2 weeks) | 2.13% | 956 | 0.94 |
+| 720h (30 days) | 1.86% | 829 | 0.96 |
+| 1,440h (60 days) | 1.78% | 795 | 0.96 |
+| 2,160h (90 days) | 1.77% | 792 | 0.96 |
+
+The critical threshold is **one week (168h)**: MAPE halves from 5.65% to 2.80% as the model first observes a complete weekly demand cycle. Beyond 30 days, returns are marginal — extending from 30 to 90 days reduces MAPE by only 0.09 percentage points. For operational deployment, 30 days of context provides the best accuracy-to-compute tradeoff. Operators with limited historical data can achieve reasonable accuracy (2.80%) with as little as one week of history.
+
 **Error analysis reveals holidays as the primary failure mode.** We decompose Chronos-2 errors on SE by hour-of-day, day-of-week, and calendar date (Figure 9). Overnight hours (00:00-04:00) achieve 0.5-0.9% MAPE, while peak afternoon hours (13:00-15:00) reach 2.5-2.7% MAPE — consistent with higher load variability during working hours. Weekends (1.75% MAPE) are easier than weekdays (1.90%), with Monday the hardest day (2.37%) due to the difficulty of predicting the workweek ramp-up from weekend context.
 
 Most critically, **all 10 worst prediction days are Brazilian public holidays**: Good Friday (14.2% MAPE), Tiradentes Day (12.6%), Christmas (12.4%), Labour Day (10.6%), and Black Consciousness Day (8.9%). Without calendar input, the model predicts normal workday demand when actual demand drops sharply. Excluding holidays, overall MAPE would fall well below 1.7%. This identifies a clear, actionable improvement path: adding a binary holiday feature as exogenous input would likely eliminate the model's worst errors.
@@ -311,6 +325,9 @@ We present the first evaluation of time series foundation models on Brazilian el
 
 **Figure 9.** Error analysis — MAPE by hour-of-day, day-of-week, error distribution, and daily MAPE over test year.
 ![Error Analysis SE](results/error_analysis_SE.png)
+
+**Figure 10.** Context length ablation — one week is the critical threshold, 30 days is the sweet spot.
+![Context Ablation SE](results/context_ablation_SE.png)
 
 ---
 
