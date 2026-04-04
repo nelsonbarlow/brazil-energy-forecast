@@ -172,14 +172,6 @@ def main():
         save_checkpoints=True,
     )
 
-    n_params = sum(p.numel() for p in model.model.parameters()
-                   if hasattr(model, 'model') and model.model is not None)
-    if n_params == 0:
-        # Model not yet built — estimate
-        print(f'  (parameter count available after first training step)')
-    else:
-        print(f'  Parameters: {n_params:,}')
-
     # ------------------------------------------------------------------
     # Train
     # ------------------------------------------------------------------
