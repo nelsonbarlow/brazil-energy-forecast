@@ -4,54 +4,72 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Benchmarking zero-shot time series foundation models (Chronos-2, TiRex, Moirai 2.0) on Brazilian electricity load forecasting using ONS (Operador Nacional do Sistema Eletrico) hourly data. This is a research project targeting publication — the novel claim is that zero-shot foundation models achieve ISO-grade accuracy (1.86% MAPE) on Brazil's hydro-dependent grid without any local training.
+Benchmarking zero-shot time series foundation models on Brazilian electricity load forecasting using ONS data. The paper's thesis is "universality of electricity demand" — patterns are physics-driven and transfer across grids without local training. Paper targets Applied Energy or IEEE TPWRS.
+
+## Key results (SE subsystem, 24h horizon)
+
+| Model | Type | MAPE |
+|-------|------|------|
+| Chronos-2 (fine-tuned) | Fine-tuned | 1.73% |
+| Chronos-2 | Zero-shot | 1.86% |
+| Moirai 2.0 | Zero-shot | 1.93% |
+| N-BEATS | Trained 5+ years | 2.14% |
+| TiRex | Zero-shot | 2.33% |
+| Naive (7d ago) | Baseline | 5.13% |
+
+Data leakage cleared: ONS not in Chronos training corpus.
 
 ## Commands
 
 ```bash
-# Download ONS hourly load data (downloads to data/raw/, processes to data/processed/)
-python scripts/download_ons.py --subsystem SE              # single subsystem
-python scripts/download_ons.py --start 2000 --end 2025     # custom year range
+# Download data
+python scripts/download_ons.py --subsystem SE
 
-# Run benchmark (outputs CSV + PNG to results/)
-python scripts/benchmark.py                                 # all models, SE, 24h horizon
-python scripts/benchmark.py --subsystem NE --horizon 168    # specific subsystem/horizon
-python scripts/benchmark.py --models naive chronos --device cpu  # subset of models, force CPU
+# Benchmarks (all models, all subsystems)
+python scripts/benchmark.py
+python scripts/benchmark.py --subsystem NE --horizon 168
+python scripts/benchmark.py --test-year 2023 --models naive chronos
+
+# Trained baselines
+python scripts/train_nbeats.py                    # N-BEATS via Darts (CPU only, MPS breaks)
+python scripts/train_baselines.py                 # LSTM + Linear
+
+# Fine-tuning
+python scripts/finetune_chronos.py --device cpu   # MPS breaks for fine-tuning
+
+# Analysis
+python scripts/error_analysis.py                  # MAPE by hour/day/holiday
+python scripts/probabilistic_eval.py              # CRPS, calibration, PI
+python scripts/context_ablation.py                # Context length sweep
 ```
 
 ## Architecture
 
-Two-script pipeline, no library/package structure:
+Scripts in `scripts/`, data in `data/`, results in `results/`. No library structure.
 
-1. **`scripts/download_ons.py`** — Fetches yearly CSVs from ONS S3 (`ons-aws-prod-opendata` bucket), renames columns to English, concatenates, and saves as parquet + CSV in `data/processed/`. Raw CSVs are semicolon-delimited with columns: `id_subsistema`, `nom_subsistema`, `din_instante`, `val_cargaenergiahomwmed`.
+**Model API quirks:**
+- Chronos-2: `BaseChronosPipeline`, input `(1, 1, seq_len)` 3D, returns `list[Tensor]` shape `(variates, quantiles, pred_len)`
+- TiRex: `load_model('NX-AI/TiRex')`, input `(1, seq_len)` 2D, returns `(quantiles, mean)`
+- Moirai 2.0: `Moirai2Forecast` + `Moirai2Module` (NOT v1 `MoiraiModule`), input `list[np.ndarray]`, returns `(batch, 9_quantiles, pred_len)`, index 4 = median
+- **MPS breaks** for Darts N-BEATS (float64) and Chronos fine-tuning (fused AdamW). Use `--device cpu` or `accelerator: cpu`.
 
-2. **`scripts/benchmark.py`** — Loads processed data, splits last N days as test (default 365), runs rolling forecasts in `horizon`-step increments using a 720-hour (30-day) context window. Each model runner function (`run_chronos`, `run_tirex`, `run_moirai`, `run_naive`) returns a numpy array of predictions. Metrics are computed via `evaluate()` using seasonality=24 for MASE/RMSSE.
+## PRIORITY: Remaining reviewer issue W2
 
-**Model API differences to be aware of:**
-- Chronos-2: `BaseChronosPipeline`, input shape `(1, 1, seq_len)` (3D), returns `list[Tensor]` of shape `(n_variates, n_quantiles, pred_len)`, median = middle quantile index
-- TiRex: `load_model('NX-AI/TiRex')`, input shape `(1, seq_len)` (2D), returns `(quantiles, mean)`, use `mean` for point forecast
-- Moirai 2.0: `Moirai2Forecast` + `Moirai2Module` (NOT `MoiraiModule` — that's v1), input is `list[np.ndarray]`, returns `(batch, 9_quantiles, pred_len)`, index 4 = median (0.5 quantile)
+**N-BEATS may be under-tuned.** It early-stopped at epoch 30/200 with only one hyperparameter config. To address:
 
-## Data
+1. Try different input lengths: `--input-length 336` and `--input-length 720`
+2. Try different learning rates: `--lr 5e-4` and `--lr 1e-3`
+3. Run best config 3x with different seeds (add `--random-state` flag to script if needed)
+4. Report mean +/- std
 
-- **Source:** https://dados.ons.org.br/ (CC-BY 4.0, no auth required)
-- **S3 pattern:** `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/curva-carga-ho/CURVA_CARGA_{YEAR}.csv`
-- **Subsystems:** SE (Sudeste, ~40k MW), S (Sul, ~14k MW), NE (Nordeste, ~13k MW), N (Norte, ~8k MW)
-- `data/raw/` is gitignored; `data/processed/` is gitignored. User must run download_ons.py first.
+Even if N-BEATS improves, the key comparison is Moirai (11M, zero-shot) vs N-BEATS (7.3M, trained) at comparable model size. If Moirai still wins, the finding is robust.
 
-## Research context
+## Other minor TODOs
 
-- **Paper draft:** `DRAFT_PAPER.md` — structured academic paper with results for all 4 subsystems and international comparison
-- **Intuition guide:** `INTUITION.md` — plain English explanation of why this works
-- **Key result:** Chronos-2 achieves 1.67-3.17% MAPE across all 4 subsystems (zero-shot), beating naive baselines by 45-64%
-- **Comparison:** Matches PJM (US) proprietary forecasts at 1.78-1.98% MAPE
-- **Related repo:** https://github.com/nelsonbarlow/xlstm-ts — prior work on xLSTM-TS stock prediction paper replication (concluded that stock directional prediction is not viable)
+- M2: Replace approximate dataset stats (~61,000) with exact numbers
+- M5: Fill in [TODO] references in Related Work section
+- Remove "Draft — Work in Progress" header when ready to submit
 
-## Reviewer critique guidance
+## Paper structure
 
-When suggesting improvements to the paper or experiments, adopt the perspective of a tier-1 venue reviewer (NeurIPS, ICML, AAAI). Key weaknesses to address:
-- No locally-trained model comparison (LSTM, N-BEATS on ONS data)
-- Univariate only (no weather/calendar exogenous features)
-- Single test year
-- No probabilistic evaluation (CRPS, calibration)
-- No extreme event / holiday analysis
+`DRAFT_PAPER.md` — 10 figures, 7 experimental sections, universality framing. All experimental results are complete except W2 N-BEATS tuning.
