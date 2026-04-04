@@ -1,0 +1,56 @@
+{
+  "subsystem": "S",
+  "horizon": 24,
+  "best_input_length": 168,
+  "best_lr": 0.0001,
+  "seeds": [
+    42,
+    123,
+    7
+  ],
+  "n_runs": 3,
+  "metrics_mean_std": {
+    "MAE (MW)": "454.01 +/- 30.83",
+    "RMSE (MW)": "665.11 +/- 29.43",
+    "MAPE": "3.26 +/- 0.21",
+    "MASE": "0.36 +/- 0.02",
+    "RMSSE": "0.36 +/- 0.02",
+    "R2": "0.94 +/- 0.01"
+  },
+  "per_seed": [
+    {
+      "input_length": 168,
+      "lr": 0.0001,
+      "seed": 42,
+      "MAE (MW)": 439.42,
+      "RMSE (MW)": 660.23,
+      "MAPE": 3.17,
+      "MASE": 0.35,
+      "RMSSE": 0.36,
+      "R2": 0.94
+    },
+    {
+      "input_length": 168,
+      "lr": 0.0001,
+      "seed": 123,
+      "MAE (MW)": 489.42,
+      "RMSE (MW)": 696.67,
+      "MAPE": 3.5,
+      "MASE": 0.39,
+      "RMSSE": 0.38,
+      "R2": 0.94
+    },
+    {
+      "input_length": 168,
+      "lr": 0.0001,
+      "seed": 7,
+      "MAE (MW)": 433.18,
+      "RMSE (MW)": 638.42,
+      "MAPE": 3.12,
+      "MASE": 0.35,
+      "RMSSE": 0.35,
+      "R2": 0.95
+    }
+  ],
+  "sweep_csv": "/Users/nelsonbarlow/Code/brazil-energy-forecast/results/nbeats_sweep_S_24h.csv"
+}

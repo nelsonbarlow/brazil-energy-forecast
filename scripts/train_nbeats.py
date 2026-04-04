@@ -102,6 +102,8 @@ def main():
     parser.add_argument('--num-layers', type=int, default=4)
     parser.add_argument('--layer-widths', type=int, default=256)
     parser.add_argument('--patience', type=int, default=10)
+    parser.add_argument('--random-state', type=int, default=42,
+                        help='Random seed for reproducibility (default: 42)')
     args = parser.parse_args()
 
     print(f'Subsystem: {args.subsystem}')
@@ -167,7 +169,7 @@ def main():
             'callbacks': [early_stopper],
             'accelerator': 'cpu',
         },
-        random_state=42,
+        random_state=args.random_state,
         force_reset=True,
         save_checkpoints=True,
     )
@@ -251,6 +253,8 @@ def main():
                             f'nbeats_comparison_{args.subsystem}_{args.horizon}h.csv')
     results_df.to_csv(csv_path)
     print(f'\nCSV: {csv_path}')
+
+    return nbeats_metrics
 
 
 if __name__ == '__main__':

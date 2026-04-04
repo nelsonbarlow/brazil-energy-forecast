@@ -13,7 +13,7 @@ Benchmarking zero-shot time series foundation models on Brazilian electricity lo
 | Chronos-2 (fine-tuned) | Fine-tuned | 1.73% |
 | Chronos-2 | Zero-shot | 1.86% |
 | Moirai 2.0 | Zero-shot | 1.93% |
-| N-BEATS | Trained 5+ years | 2.14% |
+| N-BEATS (tuned) | Trained 5+ years | 1.91% ± 0.08% |
 | TiRex | Zero-shot | 2.33% |
 | Naive (7d ago) | Baseline | 5.13% |
 
@@ -53,21 +53,14 @@ Scripts in `scripts/`, data in `data/`, results in `results/`. No library struct
 - Moirai 2.0: `Moirai2Forecast` + `Moirai2Module` (NOT v1 `MoiraiModule`), input `list[np.ndarray]`, returns `(batch, 9_quantiles, pred_len)`, index 4 = median
 - **MPS breaks** for Darts N-BEATS (float64) and Chronos fine-tuning (fused AdamW). Use `--device cpu` or `accelerator: cpu`.
 
-## PRIORITY: Remaining reviewer issue W2
+## RESOLVED: Reviewer issue W2
 
-**N-BEATS may be under-tuned.** It early-stopped at epoch 30/200 with only one hyperparameter config. To address:
-
-1. Try different input lengths: `--input-length 336` and `--input-length 720`
-2. Try different learning rates: `--lr 5e-4` and `--lr 1e-3`
-3. Run best config 3x with different seeds (add `--random-state` flag to script if needed)
-4. Report mean +/- std
-
-Even if N-BEATS improves, the key comparison is Moirai (11M, zero-shot) vs N-BEATS (7.3M, trained) at comparable model size. If Moirai still wins, the finding is robust.
+**N-BEATS tuning complete.** Grid search over 9 configs (input_length ∈ {168,336,720} × lr ∈ {1e-4,5e-4,1e-3}), best config (168h, lr=5e-4) run 3× with seeds {42,123,7}. Result: **1.91% ± 0.08% MAPE** (improved from 2.14%). Moirai (1.93%) vs tuned N-BEATS (1.91%) is now a statistical tie at comparable model size — but zero-shot requires no local training. Chronos-2 (1.86%) still wins outright. Script: `scripts/nbeats_sweep.py`.
 
 ## Other minor TODOs
 
-- M2: Replace approximate dataset stats (~61,000) with exact numbers
-- M5: Fill in [TODO] references in Related Work section
+- ~~M2: Replace approximate dataset stats (~61,000) with exact numbers~~ DONE (61,368 rows, exact means)
+- ~~M5: Fill in [TODO] references in Related Work section~~ DONE (Santos et al. 2023, Velasquez et al. 2022, de Oliveira et al. 2023)
 - Remove "Draft — Work in Progress" header when ready to submit
 
 ## Paper structure

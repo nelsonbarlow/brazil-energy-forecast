@@ -1,0 +1,60 @@
+{
+  "subsystem": "SE",
+  "n_windows": 365,
+  "n_bootstrap": 10000,
+  "chronos2": {
+    "mape_mean": 1.8566,
+    "mape_ci_lo": 1.6981,
+    "mape_ci_hi": 2.035,
+    "note": "deterministic inference, CI from bootstrap over test windows"
+  },
+  "nbeats_per_seed": {
+    "42": {
+      "mape_mean": 1.855,
+      "mape_ci_lo": 1.7131,
+      "mape_ci_hi": 2.015
+    },
+    "123": {
+      "mape_mean": 1.8842,
+      "mape_ci_lo": 1.7422,
+      "mape_ci_hi": 2.0408
+    },
+    "7": {
+      "mape_mean": 2.0006,
+      "mape_ci_lo": 1.858,
+      "mape_ci_hi": 2.1593
+    }
+  },
+  "dm_tests": {
+    "42": {
+      "dm_statistic": 1.0034,
+      "dm_p_value": 0.3163,
+      "paired_t_statistic": 0.0346,
+      "paired_t_p_value": 0.9724,
+      "interpretation": "not significant (p>=0.05)"
+    },
+    "123": {
+      "dm_statistic": 1.0504,
+      "dm_p_value": 0.2942,
+      "paired_t_statistic": -0.5227,
+      "paired_t_p_value": 0.6015,
+      "interpretation": "not significant (p>=0.05)"
+    },
+    "7": {
+      "dm_statistic": -0.3474,
+      "dm_p_value": 0.7285,
+      "paired_t_statistic": -2.4955,
+      "paired_t_p_value": 0.013,
+      "interpretation": "not significant (p>=0.05)"
+    }
+  },
+  "nbeats_aggregate": {
+    "mape_mean": 1.9133,
+    "mape_std": 0.0629,
+    "seeds": [
+      42,
+      123,
+      7
+    ]
+  }
+}
