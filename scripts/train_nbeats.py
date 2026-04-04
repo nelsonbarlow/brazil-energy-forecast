@@ -165,7 +165,7 @@ def main():
         lr_scheduler_kwargs={'patience': 5, 'factor': 0.5, 'min_lr': 1e-6},
         pl_trainer_kwargs={
             'callbacks': [early_stopper],
-            'accelerator': 'auto',
+            'accelerator': 'cpu',
         },
         random_state=42,
         force_reset=True,
