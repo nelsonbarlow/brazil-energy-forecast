@@ -1,0 +1,8 @@
+Metric,Value
+Overall MAPE,1.86%
+Weekday MAPE,1.90%
+Weekend MAPE,1.75%
+Best Hour MAPE,0.51% (hour 0)
+Worst Hour MAPE,2.72% (hour 15)
+Best Day MAPE,1.60% (Tuesday)
+Worst Day MAPE,2.37% (Monday)

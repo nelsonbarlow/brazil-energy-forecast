@@ -1,0 +1,3 @@
+,MAE (MW),RMSE (MW),MAPE,MASE,RMSSE,R2
+Chronos-2 (zero-shot),829.3,1317.72,1.86,0.33,0.35,0.96
+Chronos-2 (fine-tuned),768.82,1257.02,1.73,0.3,0.34,0.96
