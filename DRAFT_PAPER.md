@@ -6,7 +6,7 @@
 
 ## Abstract
 
-Are the patterns governing electricity demand universal — shared across grids, climates, and hemispheres — or fundamentally local, requiring region-specific models? We provide empirical evidence for universality. Evaluating three time series foundation models — Chronos-2 (120M parameters), TiRex (35M), and Moirai 2.0 (11M) — on day-ahead load forecasting across Brazil's four electrical subsystems, we find that models pre-trained on diverse global time series, with no exposure to Brazilian data, achieve 1.86% MAPE on the SE (Sudeste) subsystem. This matches proprietary US ISO systems (PJM: 1.78-1.98%) and outperforms N-BEATS (2.14%), a state-of-the-art deep learning model trained on 5+ years of local data. Fine-tuning on local data yields only a 7% relative improvement (1.73% MAPE), indicating that pre-training already captures 93% of the learnable signal. Error analysis reveals that the model's failures are concentrated entirely on Brazilian public holidays — the one domain where local cultural knowledge, absent from the global pre-training corpus, is required. These findings suggest that electricity demand follows universal regularities rooted in physics and human behaviour that transfer across regions without adaptation, with local particularities confined to calendar-specific events.
+Are the patterns governing electricity demand universal — shared across grids, climates, and hemispheres — or fundamentally local, requiring region-specific models? We provide empirical evidence for universality. Evaluating three time series foundation models — Chronos-2 (120M parameters), TiRex (35M), and Moirai 2.0 (11M) — on day-ahead load forecasting across Brazil's four electrical subsystems, we find that models pre-trained on diverse global time series, with no exposure to Brazilian data, achieve 1.86% MAPE on the SE (Sudeste) subsystem. This matches proprietary US ISO systems (PJM: 1.78-1.98%) and outperforms N-BEATS (2.14%), a state-of-the-art deep learning model trained on 5+ years of local data. Fine-tuning on local data yields only a 7% relative improvement (1.73% MAPE), indicating that zero-shot pre-training already captures most of the learnable improvement over naive baselines. Error analysis reveals that the model's failures are concentrated entirely on Brazilian public holidays — the one domain where local cultural knowledge, absent from the global pre-training corpus, is required. These findings are consistent with electricity demand following universal regularities rooted in physics and human behaviour that transfer across regions without adaptation, with local particularities confined to calendar-specific events.
 
 ---
 
@@ -29,7 +29,7 @@ The evidence strongly favours universality:
 1. **Zero-shot models match ISO-grade accuracy.** Chronos-2, with no Brazilian training data, achieves 1.86% MAPE on the SE subsystem — comparable to PJM's proprietary system (1.78-1.98%), which uses weather forecasts, calendar features, and decades of engineering.
 2. **Zero-shot beats locally trained deep learning.** Chronos-2 (zero-shot) outperforms N-BEATS trained on 5+ years of local ONS data (2.14% MAPE) by 13%.
 3. **The result is universal across Brazil.** All four subsystems (SE, S, NE, N) show 45-64% improvement over naive baselines, with R² > 0.90 in every case, despite spanning different climates, economies, and load magnitudes.
-4. **Local training adds little.** Fine-tuning Chronos-2 on local data improves MAPE from 1.86% to 1.73% — only 7%, suggesting the pre-trained model already captures 93% of the learnable signal.
+4. **Local training adds little.** Fine-tuning Chronos-2 on local data improves MAPE from 1.86% to 1.73% — only 7%, suggesting the pre-trained model already captures most of the learnable improvement over naive baselines.
 5. **Failures are precisely where universality breaks down.** All 10 worst prediction days are Brazilian public holidays — events that are culturally local and absent from global pre-training data. Excluding holidays, the model's MAPE drops well below 1.7%.
 6. **One week of history suffices.** The model needs just 168 hours of context to halve its error rate, because the weekly demand cycle is the dominant universal pattern.
 
@@ -107,13 +107,13 @@ Given a context window of H historical hourly load values for a single subsystem
 ### 3.3 Evaluation Protocol
 
 - **Rolling forecast**: We step through the test set in 24-hour increments, producing a fresh 24-hour forecast at each step.
-- **Context length**: 720 hours (30 days) for foundation models; 336 hours (2 weeks) for the trained linear model.
-- **Zero-shot**: No foundation model parameters are updated on ONS data. The linear model is trained on the ONS training set.
+- **Context length**: 720 hours (30 days) for foundation models; 168 hours (1 week) for N-BEATS; 336 hours (2 weeks) for the trained linear model. Context lengths were chosen to match each model's typical operating range. Our ablation study (Section 4.7) shows that extending foundation model context from 168h to 720h improves MAPE by 0.94pp (2.80% to 1.86%), so the context difference partially favours foundation models.
+- **Zero-shot**: No foundation model parameters are updated on ONS data. N-BEATS and the linear model are trained on the ONS training set.
 - **Metrics**: MAE (MW), RMSE (MW), MAPE (%), MASE (seasonality=24), RMSSE (seasonality=24), R².
 
 ### 3.4 Infrastructure
 
-All experiments run on a Mac Mini M4 with 24GB unified memory. No GPU required — all models fit comfortably on CPU/MPS.
+All experiments run on a Mac Mini M4 with 24GB unified memory. No GPU required. Inference times for a single 24h forecast (MPS): Chronos-2 ~20ms, TiRex ~130ms, Moirai 2.0 ~5ms. Full test year (365 rolling forecasts): Chronos-2 ~8s, TiRex ~50s, Moirai 2.0 ~2s.
 
 ---
 
@@ -206,7 +206,7 @@ We evaluate how accuracy degrades as the forecast horizon extends from 24 hours 
 
 Foundation models dominate at operational horizons (24h-168h) but degrade past the naive crossover point at approximately 2-3 weeks. At 720h (1 month), Chronos-2 and Moirai 2.0 both exceed MASE 1.0, indicating they are formally worse than the naive weekly-repetition baseline. TiRex (MASE 0.91) remains marginally better than naive at this extreme horizon, suggesting that the xLSTM architecture's state-tracking capability may provide an advantage for very long-range forecasting.
 
-### 4.3 Probabilistic Evaluation (SE Subsystem, 24h)
+### 4.4 Probabilistic Evaluation (SE Subsystem, 24h)
 
 Beyond point forecasts, we evaluate the quality of predictive distributions using quantile outputs from Chronos-2 and Moirai 2.0.
 
@@ -219,7 +219,7 @@ Beyond point forecasts, we evaluate the quality of predictive distributions usin
 
 Both models are well-calibrated but slightly conservative: their 80% prediction intervals capture 86-89% of actual outcomes. For grid operations, this over-coverage is desirable — an overconfident model that under-covers would lead to inadequate reserve scheduling. Moirai 2.0 produces sharper prediction intervals (3,024 MW width vs 3,295 MW for Chronos-2), despite its 11x smaller model size, reinforcing the finding that model scale offers diminishing returns for this task.
 
-### 4.4 Multi-Year Robustness (SE Subsystem, 24h, Chronos-2)
+### 4.5 Multi-Year Robustness (SE Subsystem, 24h, Chronos-2)
 
 To verify that results are not an artifact of a single favorable test period, we evaluate Chronos-2 on three separate calendar years.
 
@@ -232,7 +232,7 @@ To verify that results are not an artifact of a single favorable test period, we
 
 Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a standard deviation of only 0.04 percentage points. The naive baseline varies more (5.13-5.46%), confirming that foundation model accuracy is robust to year-over-year variation in demand patterns.
 
-### 4.5 Comparison with International Benchmarks
+### 4.6 Comparison with International Benchmarks
 
 | Benchmark | Region | MAPE | Method | Input Features | Our Chronos-2 |
 |-----------|--------|------|--------|----------------|---------------|
@@ -245,7 +245,7 @@ Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a 
 
 **Note:** ISO systems (PJM, ERCOT) incorporate weather forecasts, calendar features, economic indicators, and decades of domain engineering. Our model uses **only historical load** as input — no exogenous features. Achieving comparable MAPE with univariate input alone suggests that historical load patterns contain most of the predictive signal for day-ahead forecasting, and that foundation models can extract this signal effectively without explicit feature engineering.
 
-### 4.6 Analysis
+### 4.7 Analysis
 
 **Model ranking.** On SE, the full ranking is: Chronos-2 fine-tuned (1.73%) > Chronos-2 zero-shot (1.86%) > Moirai 2.0 zero-shot (1.93%) > N-BEATS trained (2.14%) > Linear trained (2.26%) > TiRex zero-shot (2.33%) > Naive (5.13%).
 
@@ -253,7 +253,7 @@ Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a 
 
 **Fine-tuning provides modest additional gains.** Fine-tuning Chronos-2 on the ONS training data reduces MAPE from 1.86% to 1.73% — a 7% relative improvement. The modest gain suggests that the pre-trained model already captures the dominant patterns in Brazilian electricity demand, with fine-tuning primarily correcting residual local biases. The optimal fine-tuning configuration was 400 steps at learning rate 1e-5, taking approximately 40 minutes on CPU.
 
-**Model scale vs training paradigm.** The 11M-parameter Moirai 2.0 (zero-shot) outperforms the 7.3M-parameter N-BEATS (trained), despite having comparable model sizes. This suggests that the advantage of foundation models stems from their pre-training paradigm (diverse data at scale) rather than model size alone.
+**Model scale vs training paradigm.** The comparison between Chronos-2 (120M) and N-BEATS (7.3M) conflates model capacity with pre-training paradigm. The more controlled comparison is Moirai 2.0 (11M, zero-shot) vs N-BEATS (7.3M, trained): at comparable scale, the zero-shot model still wins (1.93% vs 2.14% MAPE). This suggests the advantage stems from the pre-training paradigm — learning from diverse global time series — rather than model size alone.
 
 **Naive baseline strength.** The naive baseline (MAPE 5.13%) is not trivial — it captures the strong weekly seasonality in electricity demand. Foundation models must learn to do better than this, which they clearly do (63% improvement for Chronos-2).
 
@@ -279,7 +279,7 @@ The critical threshold is **one week (168h)**: MAPE halves from 5.65% to 2.80% a
 
 **Error analysis reveals holidays as the primary failure mode.** We decompose Chronos-2 errors on SE by hour-of-day, day-of-week, and calendar date (Figure 9). Overnight hours (00:00-04:00) achieve 0.5-0.9% MAPE, while peak afternoon hours (13:00-15:00) reach 2.5-2.7% MAPE — consistent with higher load variability during working hours. Weekends (1.75% MAPE) are easier than weekdays (1.90%), with Monday the hardest day (2.37%) due to the difficulty of predicting the workweek ramp-up from weekend context.
 
-Most critically, **all 10 worst prediction days are Brazilian public holidays**: Good Friday (14.2% MAPE), Tiradentes Day (12.6%), Christmas (12.4%), Labour Day (10.6%), and Black Consciousness Day (8.9%). Without calendar input, the model predicts normal workday demand when actual demand drops sharply. Excluding holidays, overall MAPE would fall well below 1.7%. This identifies a clear, actionable improvement path: adding a binary holiday feature as exogenous input would likely eliminate the model's worst errors.
+Most critically, **all 10 worst prediction days are Brazilian public holidays**: Good Friday (14.2% MAPE), Tiradentes Day (12.6%), Christmas (12.4%), Labour Day (10.6%), and Black Consciousness Day (8.9%). Without calendar input, the model predicts normal workday demand when actual demand drops sharply. Excluding the 10 holiday days (240 hours, ~2.7% of the test set), MAPE drops to approximately 1.6%. This identifies a clear, actionable improvement path: adding a binary holiday feature as exogenous input would likely eliminate the model's worst errors.
 
 **Horizon decay and the naive crossover.** Foundation model accuracy degrades predictably with horizon length (Figure 5). At 24h, Chronos-2 achieves 64% lower MAPE than naive; by 168h (1 week) this advantage shrinks to 30%; and at 720h (1 month) the naive baseline wins outright. This crossover occurs because the naive baseline's core assumption — that demand repeats weekly — becomes increasingly accurate at longer horizons where daily noise averages out. Foundation models, generating autoregressively, accumulate error with each step. The practical implication is clear: foundation models are most valuable for operational horizons (day-ahead to week-ahead), while simple seasonal baselines suffice for monthly planning. Notably, TiRex maintains MASE < 1.0 even at 720h, suggesting xLSTM's recurrent state-tracking may be better suited than transformer architectures for very long-range energy forecasting.
 
@@ -322,7 +322,7 @@ Our findings yield a practical recipe for deploying foundation models in emergin
 
 ## 6. Conclusion
 
-Electricity demand patterns are universal. A model trained on global time series, with no exposure to Brazilian data, matches the accuracy of purpose-built ISO forecasting systems and outperforms a deep learning model trained on 5+ years of local data. This result holds across all four Brazilian subsystems (1.67-3.17% MAPE, R² > 0.90), is stable across three test years (1.89% ± 0.04%), and extends to probabilistic forecasting (well-calibrated prediction intervals with 86-89% coverage).
+Our evidence is consistent with electricity demand patterns being universal. A model trained on global time series, with no exposure to Brazilian data, matches the accuracy of purpose-built ISO forecasting systems and outperforms a deep learning model trained on 5+ years of local data. This result holds across all four Brazilian subsystems (1.67-3.17% MAPE, R² > 0.90), is stable across three test years (1.89% ± 0.04%), and extends to probabilistic forecasting (well-calibrated prediction intervals with 86-89% coverage).
 
 The boundary of universality is precise: the model fails on Brazilian public holidays — culturally local events absent from global training data — and nowhere else. This is not a limitation to be engineered around, but a finding to be understood: it tells us exactly where global knowledge ends and local knowledge begins.
 
