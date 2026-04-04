@@ -219,14 +219,16 @@ Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a 
 
 ### 4.5 Comparison with International Benchmarks
 
-| Benchmark | Region | MAPE | Method | Our Chronos-2 |
-|-----------|--------|------|--------|---------------|
-| PJM official 24h | US | 1.78-1.98% | Proprietary | 1.86% |
-| ERCOT official | US | 1.66-3.73% | Proprietary | 1.86% |
-| N-BEATS (trained) | Portugal | 1.90% | Trained DL | 1.86% |
-| ANN multi-country | Europe (4) | 2.80% | Trained NN | 1.86% |
-| Chronos-2 zero-shot | Singapore | ~1-2% | Zero-shot | 1.86% |
-| Chronos-2 zero-shot | Australia | ~2-4% | Zero-shot | 1.86% |
+| Benchmark | Region | MAPE | Method | Input Features | Our Chronos-2 |
+|-----------|--------|------|--------|----------------|---------------|
+| PJM official 24h | US | 1.78-1.98% | Proprietary | Load + weather + calendar | 1.86% |
+| ERCOT official | US | 1.66-3.73% | Proprietary | Load + weather + calendar | 1.86% |
+| N-BEATS (trained) | Portugal | 1.90% | Trained DL | Load only | 1.86% |
+| ANN multi-country | Europe (4) | 2.80% | Trained NN | Load + weather | 1.86% |
+| Chronos-2 zero-shot | Singapore | ~1-2% | Zero-shot | Load only | 1.86% |
+| Chronos-2 zero-shot | Australia | ~2-4% | Zero-shot | Load only | 1.86% |
+
+**Note:** ISO systems (PJM, ERCOT) incorporate weather forecasts, calendar features, economic indicators, and decades of domain engineering. Our model uses **only historical load** as input — no exogenous features. Achieving comparable MAPE with univariate input alone suggests that historical load patterns contain most of the predictive signal for day-ahead forecasting, and that foundation models can extract this signal effectively without explicit feature engineering.
 
 ### 4.6 Analysis
 
