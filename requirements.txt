@@ -5,6 +5,7 @@ scikit-learn
 matplotlib
 seaborn
 tqdm
+holidays
 torch
 einops
 requests
