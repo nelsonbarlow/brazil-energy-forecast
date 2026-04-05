@@ -58,31 +58,166 @@ CATEGORIES = ['normal', 'weekend', 'holiday', 'day_before',
 # ---------------------------------------------------------------------------
 # Holiday classification
 # ---------------------------------------------------------------------------
-def build_holiday_features(dates):
-    """Classify each hour in `dates` into one of CATEGORIES.
+# States covered by each ONS subsystem (dominant load centres).
+# Used to build a subsystem-refined holiday set including state-level
+# holidays. Municipal holidays for each state's capital are appended
+# separately in _municipal_capitals_for_subsystem.
+SUBSYSTEM_STATES = {
+    'SE': ('SP', 'RJ', 'MG', 'ES'),   # + Centro-Oeste: GO, DF (skipped here)
+    'S':  ('RS', 'SC', 'PR'),
+    'NE': ('BA', 'PE', 'CE', 'PI', 'MA', 'RN', 'PB', 'SE', 'AL'),
+    'N':  ('AM', 'PA', 'TO'),
+}
 
-    Uses the `holidays` library for Brazilian national holidays, plus
-    manual Carnaval Monday/Tuesday (de facto holidays) which the lib
-    marks as optional.
+
+def _municipal_capitals_for_subsystem(subsystem, years):
+    """Return a set of dates for the main municipal holidays (capital
+    city anniversaries) of the states in the subsystem. These are not
+    covered by the `holidays` library.
+    """
+    capitals = {
+        'SE': [(1, 25),  # São Paulo aniversário
+               (3, 1),   # Rio de Janeiro aniversário
+               (12, 12)],  # Belo Horizonte aniversário
+        'S':  [(3, 26),  # Porto Alegre
+               (3, 29)], # Curitiba
+        'NE': [(3, 29),  # Salvador (fundação)
+               (3, 8)],  # Recife (fundação)
+        'N':  [(10, 24)],  # Manaus
+    }
+    out = set()
+    for m, d in capitals.get(subsystem, []):
+        for y in years:
+            out.add(pd.Timestamp(y, m, d).date())
+    return out
+
+
+# Population shares by subsystem, IBGE 2022 approx (in millions).
+# TODO: refine later with ONS load-share per state (more accurate for
+# "fraction of subsystem demand affected"), and add major municipalities
+# beyond the capital (Campinas, Niterói, etc).
+SUBSYSTEM_TOTAL_POP_M = {'SE': 107.0, 'S': 30.4, 'NE': 57.0, 'N': 9.9}
+STATE_POP_M = {
+    'SP': 46.0, 'RJ': 17.2, 'MG': 21.4, 'ES': 4.0,
+    'GO': 7.1, 'DF': 2.9, 'MT': 3.8, 'MS': 2.9,
+    'RS': 11.4, 'SC': 7.8, 'PR': 11.5,
+    'BA': 14.1, 'PE': 9.1, 'CE': 8.8, 'PI': 3.3, 'MA': 6.8,
+    'RN': 3.3, 'PB': 4.0, 'SE': 2.2, 'AL': 3.1,
+    'AM': 4.0, 'PA': 8.1, 'TO': 1.6,
+}
+CAPITAL_POP_M = {
+    'SP': 12.4, 'RJ': 6.7, 'MG': 2.3, 'ES': 0.32,
+    'RS': 1.33, 'SC': 0.51, 'PR': 1.83,
+    'BA': 2.42, 'PE': 1.49,
+    'AM': 2.06, 'PA': 1.30, 'TO': 0.31,
+}
+
+
+def build_holiday_weights(years, subsystem):
+    """Return {date: weight ∈ (0, 1]} — weight is the fraction of the
+    subsystem's population affected by any holiday falling on that date.
+
+    - Federal public holidays & Carnaval     → weight 1.0
+    - State holiday (state X only)           → pop(X) / pop(subsystem)
+    - Capital-city anniversary (state X)     → pop(capital_X) / pop(subsystem)
+    When multiple holidays overlap, the max weight wins (affected share
+    is bounded by 1, not additive).
     """
     import holidays
-
-    years = sorted({pd.Timestamp(d).year for d in dates})
-    # 'public' = official federal holidays; 'optional' adds Carnaval,
-    # Corpus Christi, and eves. We filter eves/Ash-Wed since they are
-    # half-days that don't shift load like full holidays do.
-    br_all = holidays.Brazil(
-        years=years, categories=('public', 'optional'))
     drop_names = {'Véspera de Natal', 'Véspera de Ano-Novo',
                   'Início da Quaresma', 'Dia do Servidor Público'}
-    br = {d: n for d, n in br_all.items() if n not in drop_names}
+    total = SUBSYSTEM_TOTAL_POP_M.get(subsystem)
+    if total is None:
+        raise ValueError(f'unknown subsystem {subsystem}')
 
-    # Identify Carnaval (Mon & Tue before Ash Wednesday) separately
-    # for its own analysis category — Carnaval week is the prime
-    # regime-shift example in Brazilian load.
-    carnaval_days = {d for d, n in br.items() if n == 'Carnaval'}
+    weights = {}
 
-    holiday_dates = set(br.keys())
+    def bump(d, w):
+        prev = weights.get(d, 0.0)
+        if w > prev:
+            weights[d] = w
+
+    # federal
+    br_fed = holidays.Brazil(years=years, categories=('public', 'optional'))
+    for d, n in br_fed.items():
+        if n in drop_names:
+            continue
+        bump(pd.Timestamp(d).date(), 1.0)
+
+    # state holidays (restrict to this state's extra dates,
+    # i.e. dates NOT already in the federal set for that state's subdiv)
+    fed_dates = {pd.Timestamp(d).date() for d, n in br_fed.items()
+                 if n not in drop_names}
+    for sd in SUBSYSTEM_STATES.get(subsystem, ()):
+        h = holidays.Brazil(
+            years=years, subdiv=sd, categories=('public', 'optional'))
+        w = STATE_POP_M.get(sd, 0.0) / total
+        for d, n in h.items():
+            if n in drop_names:
+                continue
+            d0 = pd.Timestamp(d).date()
+            # if already federal, skip — federal weight is already 1.0
+            if d0 in fed_dates:
+                continue
+            bump(d0, w)
+
+    # municipal (capital anniversaries only, hardcoded)
+    _municipal = {
+        'SE': [(1, 25, 'SP'), (3, 1, 'RJ'), (12, 12, 'MG')],
+        'S':  [(3, 26, 'RS'), (3, 29, 'PR')],
+        'NE': [(3, 29, 'BA'), (3, 8, 'PE')],
+        'N':  [(10, 24, 'AM')],
+    }
+    for m, d, st in _municipal.get(subsystem, []):
+        cap_pop = CAPITAL_POP_M.get(st, 0.0)
+        w = cap_pop / total
+        for y in years:
+            bump(pd.Timestamp(y, m, d).date(), w)
+
+    return weights
+
+
+def build_br_holiday_set(years, subsystem=None, refined=False):
+    """Return (holiday_dates, carnaval_dates) as two sets of date objects.
+
+    If refined=False: federal public + optional (minus half-day eves).
+    If refined=True and subsystem given: also unions state-level holidays
+    for the subsystem's states and adds capital-city anniversaries.
+    """
+    import holidays
+    drop_names = {'Véspera de Natal', 'Véspera de Ano-Novo',
+                  'Início da Quaresma', 'Dia do Servidor Público'}
+
+    br_fed = holidays.Brazil(years=years, categories=('public', 'optional'))
+    br_fed = {d: n for d, n in br_fed.items() if n not in drop_names}
+    holiday_dates = {pd.Timestamp(d).date() for d in br_fed.keys()}
+    carnaval_dates = {pd.Timestamp(d).date()
+                      for d, n in br_fed.items() if n == 'Carnaval'}
+
+    if refined and subsystem in SUBSYSTEM_STATES:
+        for sd in SUBSYSTEM_STATES[subsystem]:
+            st = holidays.Brazil(
+                years=years, subdiv=sd, categories=('public', 'optional'))
+            st = {d: n for d, n in st.items() if n not in drop_names}
+            holiday_dates |= {pd.Timestamp(d).date() for d in st.keys()}
+        holiday_dates |= _municipal_capitals_for_subsystem(subsystem, years)
+
+    return holiday_dates, carnaval_dates
+
+
+def build_holiday_features(dates, subsystem=None, refined=False):
+    """Classify each hour in `dates` into one of CATEGORIES.
+
+    subsystem + refined: if True, expand the holiday set to include
+    state-level and capital-city-municipal holidays for the subsystem.
+    """
+    years = sorted({pd.Timestamp(d).year for d in dates})
+    holiday_dates, carnaval_days = build_br_holiday_set(
+        years, subsystem=subsystem, refined=refined)
+
+    # Expose a dict-like view for the caller (name not critical, just
+    # used for the "holidays detected" count).
+    br = {d: 'holiday' for d in holiday_dates}
 
     # Build per-date category (one category per calendar day,
     # then broadcast to hours)

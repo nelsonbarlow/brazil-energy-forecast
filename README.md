@@ -1,24 +1,38 @@
 # Brazilian Energy Load Forecasting with Foundation Models
 
-Benchmarking time series foundation models on Brazilian electricity load forecasting using ONS (Operador Nacional do Sistema Eletrico) data.
+Benchmarking zero-shot time series foundation models on Brazilian electricity load forecasting using ONS (Operador Nacional do Sistema Elétrico) data. The thesis: electricity demand patterns are physics-driven and transfer across grids without local training.
 
-## Research gap
+Paper targets Applied Energy or IEEE TPWRS.
 
-No published paper with code applies modern foundation models (Chronos-2, TiRex, Moirai) to Brazilian energy data. This project fills that gap.
+## Research Gap
 
-## Why this matters
+No published paper with code applies modern foundation models (Chronos-2, TiRex, Moirai 2.0) to Brazilian energy data. This project fills that gap with a comprehensive benchmark across all four ONS subsystems.
+
+## Why This Matters
 
 - Brazil's grid is hydro-dependent (~65% of generation), creating unique seasonal patterns (dry/wet seasons) that differ from US/EU grids
-- Energy load forecasting is non-adversarial (your prediction doesn't change demand)
-- Foundation models are designed for this type of problem and are SOTA on general forecasting benchmarks
-- The question: do they transfer zero-shot to Brazil's unique grid dynamics?
+- Foundation models pre-trained on diverse global time series may transfer zero-shot to Brazil's unique grid dynamics
+- If zero-shot models match or beat locally trained baselines, it validates the "universality of electricity demand" hypothesis
+
+## Key Results (SE subsystem, 24h horizon)
+
+| Model | Type | MAPE |
+|-------|------|------|
+| Chronos-2 (fine-tuned) | Fine-tuned | 1.73% |
+| Chronos-2 | Zero-shot | 1.86% |
+| N-BEATS (tuned) | Trained 5+ years | 1.91% ± 0.08% |
+| Moirai 2.0 | Zero-shot | 1.93% |
+| TiRex | Zero-shot | 2.33% |
+| Naive (7d ago) | Baseline | 5.13% |
+
+Zero-shot Chronos-2 beats a tuned N-BEATS trained on 5+ years of local data. Data leakage cleared: ONS is not in the Chronos training corpus.
 
 ## Data
 
-**Source:** ONS Open Data Portal (https://dados.ons.org.br/)
+**Source:** [ONS Open Data Portal](https://dados.ons.org.br/)
 
 - **License:** CC-BY 4.0 (free, open access, no registration)
-- **Resolution:** Hourly
+- **Resolution:** Hourly (61,368 rows for SE subsystem)
 - **History:** 2000-2026 (26 years)
 - **Subsystems:** SE (Sudeste/Centro-Oeste), S (Sul), NE (Nordeste), N (Norte)
 
@@ -27,9 +41,13 @@ No published paper with code applies modern foundation models (Chronos-2, TiRex,
 | Model | Params | Architecture | Type |
 |-------|--------|-------------|------|
 | Naive (7d ago) | 0 | Same hour last week | Baseline |
-| Chronos-2 | 120M | Encoder-only Transformer | Zero-shot |
+| N-BEATS | ~6M | Fully connected blocks | Trained |
+| LSTM | ~1M | Recurrent | Trained |
+| Linear | ~50K | Linear regression | Trained |
+| Chronos-2 | 8M-710M | Encoder-only Transformer | Zero-shot |
 | TiRex | 35M | xLSTM-based | Zero-shot |
 | Moirai 2.0 | 11M | Decoder-only Transformer | Zero-shot |
+| Chronos-2 (fine-tuned) | 120M | Encoder-only Transformer | Fine-tuned |
 
 ## Setup
 
@@ -44,37 +62,47 @@ pip install -r requirements.txt
 ### 1. Download data
 
 ```bash
-# Download 2019-2025 (default)
-python scripts/download_ons.py
-
-# Download more history
-python scripts/download_ons.py --start 2000 --end 2025
-
-# Single subsystem
-python scripts/download_ons.py --subsystem SE
+python scripts/download_ons.py                     # Download 2019-2025 (default)
+python scripts/download_ons.py --start 2000        # Download more history
+python scripts/download_ons.py --subsystem SE      # Single subsystem
 ```
 
-### 2. Run benchmark
+### 2. Run benchmarks
 
 ```bash
-# All models, SE subsystem, 24h forecast horizon
-python scripts/benchmark.py
+python scripts/benchmark.py                                          # All models, SE, 24h
+python scripts/benchmark.py --subsystem NE --horizon 168             # NE, 1-week horizon
+python scripts/benchmark.py --test-year 2023 --models naive chronos  # Specific models
+python scripts/benchmark.py --device cpu                             # Force CPU
+```
 
-# Specific subsystem and models
-python scripts/benchmark.py --subsystem NE --models naive chronos tirex
+### 3. Trained baselines
 
-# 1-hour ahead prediction
-python scripts/benchmark.py --horizon 1
+```bash
+python scripts/train_nbeats.py                     # N-BEATS via Darts
+python scripts/train_baselines.py                  # LSTM + Linear
+python scripts/nbeats_sweep.py                     # N-BEATS hyperparameter grid search
+```
 
-# Longer context window (30 days)
-python scripts/benchmark.py --context-length 720
+### 4. Fine-tuning
 
-# Force CPU
-python scripts/benchmark.py --device cpu
+```bash
+python scripts/finetune_chronos.py --device cpu    # Chronos-2 fine-tuning
+```
+
+### 5. Analysis
+
+```bash
+python scripts/error_analysis.py                   # MAPE by hour/day/holiday
+python scripts/probabilistic_eval.py               # CRPS, calibration, prediction intervals
+python scripts/context_ablation.py                 # Context length sweep
+python scripts/chronos_scaling.py                  # Model scaling analysis (Bolt-Tiny → Chronos-2)
+python scripts/statistical_comparison.py           # Statistical significance tests
 ```
 
 Results saved to `results/`.
 
-## Context for Claude Code
+## Notes
 
-This project benchmarks zero-shot time series foundation models on Brazilian electricity load data from ONS. The key question is whether models pre-trained on diverse global time series can accurately forecast Brazilian load without any training on local data. The naive baseline (same hour from 7 days ago) captures weekly seasonality and is the bar to beat. Metrics: MAE (MW), RMSE (MW), MAPE (%), MASE, RMSSE, R2. Data is hourly, 4 subsystems. SE (Sudeste) is the largest and most important subsystem (~55% of national load).
+- **MPS breaks** for Darts N-BEATS (float64) and Chronos fine-tuning (fused AdamW). Use `--device cpu` on Apple Silicon.
+- SE (Sudeste) is the largest and most important subsystem (~55% of national load).
