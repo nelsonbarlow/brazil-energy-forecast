@@ -66,3 +66,22 @@ Scripts in `scripts/`, data in `data/`, results in `results/`. No library struct
 ## Paper structure
 
 `DRAFT_PAPER.md` — 10 figures, 7 experimental sections, universality framing. All experimental results are complete except W2 N-BEATS tuning.
+
+## Active experimental direction (branch: holiday-covariates)
+
+**Concern:** current paper reads like a Chronos ad — load forecasting is the easy case where FMs should obviously win. Need a novel angle.
+
+**Hypotheses (falsification tests, in order):**
+- **H1** — zero-shot FMs degrade on Brazilian holidays/Carnaval/bridge days vs normal weekdays. If FALSE → pivot to other OOD regimes (extreme weather, COVID, World Cup).
+- **H2** — adding minimal holiday covariates (binary + days-until) recovers FM performance WITHOUT retraining weights.
+- **H3** (strongest narrative) — covariate gain is LARGER for FMs than N-BEATS, because N-BEATS already learned BR holidays implicitly from 5+ yrs training while FM has not. Flips the story to "universality + cheap transfer beats trained-from-scratch."
+
+**H1 pilot ready.** Run on mac-mini:
+```bash
+pip install holidays
+python scripts/holiday_analysis.py --test-year 2024
+# caches predictions under results/preds_*/ for fast iteration
+```
+Outputs conditional MAPE + lift-vs-normal table per model. Check `holiday` and `carnaval` columns for each model — if lift ≈ 1.0 everywhere, H1 is falsified.
+
+H2 covariate experiment to be designed AFTER H1 results come back.
