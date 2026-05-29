@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""
+Benchmark foundation models on TEPCO (Tokyo) electricity load data.
+
+Mirror of benchmark.py for the Brazilian ONS data. Runs the same models
+with identical hyperparameters so results are directly comparable — the
+key test of the universality hypothesis.
+
+Usage:
+    python scripts/benchmark_tepco.py                         # all models, 2024 test year
+    python scripts/benchmark_tepco.py --test-year 2023
+    python scripts/benchmark_tepco.py --models naive chronos  # subset of models
+    python scripts/benchmark_tepco.py --device cpu
+"""
+
+import argparse
+import glob
+import os
+import sys
+import numpy as np
+import pandas as pd
+import torch
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from sklearn.metrics import (
+    mean_absolute_error, mean_squared_error, root_mean_squared_error,
+    mean_absolute_percentage_error, r2_score,
+)
+from tqdm import tqdm
+import warnings
+warnings.filterwarnings('ignore')
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+PROCESSED_DIR = os.path.join(REPO_ROOT, 'data', 'processed')
+OUTPUT_DIR = os.path.join(REPO_ROOT, 'results')
+
+AVAILABLE_MODELS = ['chronos', 'tirex', 'moirai', 'naive']
+
+# ---------------------------------------------------------------------------
+# Metrics  (identical to benchmark.py)
+# ---------------------------------------------------------------------------
+def _naive_forecast(actual, seasonality=1):
+    return actual[:-seasonality]
+
+def rmsse(actual, predicted, seasonality=24):
+    q = mean_squared_error(actual, predicted) / mean_squared_error(
+        actual[seasonality:], _naive_forecast(actual, seasonality))
+    return np.sqrt(q)
+
+def mase(actual, predicted, seasonality=24):
+    return mean_absolute_error(actual, predicted) / mean_absolute_error(
+        actual[seasonality:], _naive_forecast(actual, seasonality))
+
+def evaluate(actual, predicted, model_name):
+    actual = np.asarray(actual).squeeze()
+    predicted = np.asarray(predicted).squeeze()
+    metrics = {
+        'MAE (MW)':  mean_absolute_error(actual, predicted),
+        'RMSE (MW)': root_mean_squared_error(actual, predicted),
+        'MAPE':      mean_absolute_percentage_error(actual, predicted) * 100,
+        'MASE':      mase(actual, predicted),
+        'RMSSE':     rmsse(actual, predicted),
+        'R2':        r2_score(actual, predicted),
+    }
+    print(f'\n{"─"*60}')
+    print(f'  {model_name}')
+    print(f'{"─"*60}')
+    for k, v in metrics.items():
+        fmt = f'{v:.2f}%' if k == 'MAPE' else f'{v:.2f}'
+        print(f'  {k:>12s}: {fmt}')
+    return metrics
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+def load_data(test_year=None, test_days=365):
+    pattern = os.path.join(PROCESSED_DIR, 'tepco_hourly_load_*.parquet')
+    files = glob.glob(pattern)
+    if not files:
+        pattern = os.path.join(PROCESSED_DIR, 'tepco_hourly_load_*.csv')
+        files = glob.glob(pattern)
+
+    if not files:
+        print('No TEPCO data found. Run: python scripts/download_tepco.py')
+        sys.exit(1)
+
+    # Load all files and concatenate (handles case where we downloaded in batches)
+    frames = [pd.read_parquet(f) if f.endswith('.parquet') else pd.read_csv(f)
+              for f in sorted(files)]
+    df = pd.concat(frames, ignore_index=True)
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df = df.drop_duplicates('datetime').sort_values('datetime').reset_index(drop=True)
+
+    if test_year:
+        test_start = pd.Timestamp(f'{test_year}-01-01')
+        test_end = pd.Timestamp(f'{test_year}-12-31 23:00:00')
+        df = df[df['datetime'] <= test_end].reset_index(drop=True)
+        train_df = df[df['datetime'] < test_start]
+        test_df  = df[(df['datetime'] >= test_start) & (df['datetime'] <= test_end)]
+    else:
+        cutoff = df['datetime'].max() - pd.Timedelta(days=test_days)
+        train_df = df[df['datetime'] <= cutoff]
+        test_df  = df[df['datetime'] > cutoff]
+
+    return df, train_df, test_df
+
+# ---------------------------------------------------------------------------
+# Model runners  (identical logic to benchmark.py, column name differs)
+# ---------------------------------------------------------------------------
+def run_naive(full_load, test_start_idx, test_len, ctx_len, horizon):
+    preds = []
+    for i in range(0, test_len, horizon):
+        actual_horizon = min(horizon, test_len - i)
+        for h in range(actual_horizon):
+            idx = test_start_idx + i + h - 168
+            preds.append(full_load[idx] if idx >= 0 else full_load[test_start_idx])
+    return np.array(preds[:test_len])
+
+
+def run_chronos(full_load, test_start_idx, test_len, ctx_len, horizon, device):
+    from chronos import BaseChronosPipeline
+    model = BaseChronosPipeline.from_pretrained(
+        'amazon/chronos-2', device_map=device, dtype=torch.float32,
+    )
+    preds = []
+    for i in tqdm(range(0, test_len, horizon), desc='Chronos-2'):
+        ctx = torch.tensor(
+            full_load[test_start_idx + i - ctx_len : test_start_idx + i],
+            dtype=torch.float32,
+        ).reshape(1, 1, -1)
+        actual_horizon = min(horizon, test_len - i)
+        forecasts = model.predict(ctx, prediction_length=actual_horizon)
+        f = forecasts[0]
+        median_idx = f.shape[1] // 2
+        preds.extend(f[0, median_idx, :actual_horizon].tolist())
+    return np.array(preds[:test_len])
+
+
+def run_tirex(full_load, test_start_idx, test_len, ctx_len, horizon, device):
+    from tirex import load_model
+    model = load_model('NX-AI/TiRex')
+    preds = []
+    for i in tqdm(range(0, test_len, horizon), desc='TiRex'):
+        ctx = torch.tensor(
+            full_load[test_start_idx + i - ctx_len : test_start_idx + i],
+            dtype=torch.float32,
+        ).unsqueeze(0)
+        actual_horizon = min(horizon, test_len - i)
+        quantiles, mean = model.forecast(context=ctx, prediction_length=actual_horizon)
+        preds.extend(mean.squeeze().tolist() if actual_horizon > 1
+                     else [mean.squeeze().item()])
+    return np.array(preds[:test_len])
+
+
+def run_moirai(full_load, test_start_idx, test_len, ctx_len, horizon, device):
+    from uni2ts.model.moirai2 import Moirai2Forecast, Moirai2Module
+    model = Moirai2Forecast(
+        module=Moirai2Module.from_pretrained('Salesforce/moirai-2.0-R-small'),
+        prediction_length=horizon,
+        context_length=ctx_len,
+        target_dim=1,
+        feat_dynamic_real_dim=0,
+        past_feat_dynamic_real_dim=0,
+    )
+    preds = []
+    for i in tqdm(range(0, test_len, horizon), desc='Moirai 2.0'):
+        ctx_vals = full_load[test_start_idx + i - ctx_len : test_start_idx + i]
+        actual_horizon = min(horizon, test_len - i)
+        forecast = model.predict([ctx_vals.astype(np.float32)])
+        preds.extend(forecast[0, 4, :actual_horizon].tolist())
+    return np.array(preds[:test_len])
+
+
+MODEL_RUNNERS = {
+    'naive':   ('Naive (7d ago)', None),
+    'chronos': ('Chronos-2',     run_chronos),
+    'tirex':   ('TiRex',         run_tirex),
+    'moirai':  ('Moirai 2.0',    run_moirai),
+}
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+def save_chart(results, test_dates, test_actuals, output_path):
+    fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+
+    n_plot = min(168, len(test_actuals))
+    axes[0].plot(test_dates[:n_plot], test_actuals[:n_plot],
+                 'k-', linewidth=1.5, label='Actual')
+    colors = ['#FF5722', '#2196F3', '#4CAF50', '#9C27B0']
+    for (name, preds), color in zip(results.items(), colors):
+        if isinstance(preds, np.ndarray):
+            axes[0].plot(test_dates[:n_plot], preds[:n_plot],
+                         '--', color=color, linewidth=1, alpha=0.8, label=name)
+    axes[0].set_ylabel('Load (MW)')
+    axes[0].set_title('TEPCO (Tokyo) — First 7 Days of Test Set')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    model_names = list(results.keys())
+    maes = [mean_absolute_error(test_actuals, p)
+            for p in results.values() if isinstance(p, np.ndarray)]
+    axes[1].bar(model_names[:len(maes)], maes, color=colors[:len(maes)])
+    axes[1].set_ylabel('MAE (MW)')
+    axes[1].set_title('Mean Absolute Error by Model')
+    axes[1].grid(True, alpha=0.3, axis='y')
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f'\nChart saved to {output_path}')
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(
+        description='Benchmark foundation models on TEPCO (Tokyo) load data')
+    parser.add_argument('--models', nargs='+', choices=AVAILABLE_MODELS,
+                        default=['naive', 'chronos', 'tirex', 'moirai'])
+    parser.add_argument('--horizon', type=int, default=24,
+                        help='Forecast horizon in hours (default: 24)')
+    parser.add_argument('--context-length', type=int, default=720,
+                        help='Context window in hours (default: 720 = 30 days)')
+    parser.add_argument('--test-days', type=int, default=365)
+    parser.add_argument('--test-year', type=int, default=2024,
+                        help='Calendar year to use as test set (default: 2024)')
+    parser.add_argument('--device', type=str, default=None)
+    args = parser.parse_args()
+
+    if args.device:
+        device = args.device
+    elif torch.cuda.is_available():
+        device = 'cuda'
+    elif torch.backends.mps.is_available():
+        device = 'mps'
+    else:
+        device = 'cpu'
+
+    print(f'Grid:    TEPCO (Tokyo, Japan)')
+    print(f'Device:  {device}')
+    print(f'Horizon: {args.horizon}h  Context: {args.context_length}h')
+    print(f'Models:  {", ".join(args.models)}')
+
+    df, train_df, test_df = load_data(args.test_year, args.test_days)
+    full_load = df['demand_mw'].values
+    test_start_idx = len(train_df)
+    test_actuals = full_load[test_start_idx:]
+    test_dates = df['datetime'].values[test_start_idx:]
+    test_len = len(test_actuals)
+
+    test_label = str(args.test_year) if args.test_year else f'{args.test_days}d'
+    print(f'\nTotal rows:  {len(df):,}')
+    print(f'Train:       {len(train_df):,} rows')
+    print(f'Test:        {test_len:,} rows ({test_label})')
+    print(f'Mean load:   {test_actuals.mean():,.0f} MW')
+
+    all_metrics, all_preds = {}, {}
+    for model_key in args.models:
+        display_name, runner = MODEL_RUNNERS[model_key]
+        print(f'\n{"━"*60}')
+        print(f'  Running {display_name}...')
+        print(f'{"━"*60}')
+        try:
+            if model_key == 'naive':
+                preds = run_naive(full_load, test_start_idx, test_len,
+                                  args.context_length, args.horizon)
+            else:
+                preds = runner(full_load, test_start_idx, test_len,
+                               args.context_length, args.horizon, device)
+            all_preds[display_name] = preds
+            all_metrics[display_name] = evaluate(test_actuals, preds, display_name)
+        except Exception as e:
+            print(f'  FAILED: {e}')
+            import traceback; traceback.print_exc()
+
+    if not all_metrics:
+        print('\nNo models ran.')
+        sys.exit(1)
+
+    print(f'\n{"="*70}')
+    print(f'  RESULTS: TEPCO Tokyo, {args.horizon}h horizon, test={test_label}')
+    print(f'{"="*70}')
+    results_df = pd.DataFrame(all_metrics).T.round(2)
+    print(results_df.to_string())
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    suffix = f'TEPCO_{args.horizon}h_{test_label}'
+    csv_path = os.path.join(OUTPUT_DIR, f'benchmark_{suffix}.csv')
+    results_df.to_csv(csv_path)
+    print(f'\nCSV: {csv_path}')
+
+    chart_path = os.path.join(OUTPUT_DIR, f'benchmark_{suffix}.png')
+    save_chart(all_preds, test_dates, test_actuals, chart_path)
+
+
+if __name__ == '__main__':
+    main()

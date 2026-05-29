@@ -1,0 +1,5 @@
+model,overall,normal,weekend,holiday,day_before,day_after,bridge,carnaval
+Naive (7d ago),1.04,1.0,0.87,2.44,1.66,1.11,3.34,1.19
+Chronos-2,1.21,1.0,1.17,4.87,1.38,1.48,2.58,3.75
+TiRex,1.37,1.0,1.75,5.25,1.18,2.21,0.74,2.44
+Moirai 2.0,1.25,1.0,1.25,5.13,1.42,1.81,0.99,4.37
