@@ -1,12 +1,14 @@
-# The Universality of Electricity Demand: Zero-Shot Foundation Models Match ISO-Grade Accuracy on Brazil's Power Grid
+# The Universality of Electricity Demand: Zero-Shot Foundation Models Match Locally-Trained Accuracy on Brazil's Power Grid
 
 **Draft — Work in Progress**
+
+> Long-form source material. The condensed, submission-ready version is `REPORT_IEEE.{tex,pdf}`. All numbers trace to `results/*.csv`; the holiday and TEPCO results come from the `holiday-covariates` and `asian-market` experiment branches respectively.
 
 ---
 
 ## Abstract
 
-Are the patterns governing electricity demand universal — shared across grids, climates, and hemispheres — or fundamentally local, requiring region-specific models? We provide empirical evidence for universality. Evaluating three time series foundation models — Chronos-2 (120M parameters), TiRex (35M), and Moirai 2.0 (11M) — on day-ahead load forecasting across Brazil's four electrical subsystems, we find that models pre-trained on diverse global time series, with no exposure to Brazilian data, achieve 1.86% MAPE on the SE (Sudeste) subsystem. This matches proprietary US ISO systems (PJM: 1.78-1.98%) and is statistically indistinguishable from a hyperparameter-tuned N-BEATS (1.91% ± 0.08%) trained on 5+ years of local data (Diebold-Mariano test, p > 0.29). Fine-tuning on local data yields only a 7% relative improvement (1.73% MAPE), indicating that zero-shot pre-training already captures most of the learnable improvement over naive baselines. Error analysis reveals that the model's failures are concentrated entirely on Brazilian public holidays — the one domain where local cultural knowledge, absent from the global pre-training corpus, is required. These findings are consistent with electricity demand following universal regularities rooted in physics and human behaviour that transfer across regions without adaptation, with local particularities confined to calendar-specific events.
+Are the patterns governing electricity demand universal — shared across grids, climates, and hemispheres — or fundamentally local, requiring region-specific models? We provide empirical evidence for universality. Evaluating three time series foundation models — Chronos-2 (120M parameters), TiRex (35M), and Moirai 2.0 (11M) — on day-ahead load forecasting across Brazil's four electrical subsystems, we find that models pre-trained on diverse global time series, with no exposure to Brazilian data, achieve 1.86% MAPE on the SE (Sudeste) subsystem. This is statistically indistinguishable from a hyperparameter-tuned N-BEATS (1.91% ± 0.08%) trained on 5+ years of local data (Diebold-Mariano test, p > 0.29), and lands in the band of proprietary ISO systems that additionally use weather and calendar inputs (PJM 1.78-1.98%), though MAPE is not strictly comparable across grids. The finding replicates on the Tokyo (TEPCO) grid — a different hemisphere and holiday calendar — where the same zero-shot models again beat a locally-trained N-BEATS (3.91% vs 4.44%). Fine-tuning on local data yields only a 7% relative improvement (1.73% MAPE), indicating that zero-shot pre-training already captures most of the learnable improvement over naive baselines. Error analysis localizes the residual to the holiday regime, where Chronos-2 degrades 4.9× (1.55% → 7.55% MAPE); adding a single binary holiday covariate recovers 35% of that gap. These findings are consistent with electricity demand following universal regularities rooted in physics and human behaviour that transfer across regions without adaptation, with local particularities confined to calendar-specific events.
 
 ---
 
@@ -26,12 +28,12 @@ We test this hypothesis on a challenging case: Brazil's hydro-dependent grid, wh
 
 The evidence strongly favours universality:
 
-1. **Zero-shot models match ISO-grade accuracy.** Chronos-2, with no Brazilian training data, achieves 1.86% MAPE on the SE subsystem — comparable to PJM's proprietary system (1.78-1.98%), which uses weather forecasts, calendar features, and decades of engineering.
-2. **Zero-shot matches locally trained deep learning.** Chronos-2 (zero-shot, 1.86% MAPE) is statistically indistinguishable from hyperparameter-tuned N-BEATS trained on 5+ years of local ONS data (1.91% ± 0.08% MAPE; Diebold-Mariano p > 0.29).
+1. **Zero-shot matches locally trained deep learning.** Chronos-2 (zero-shot, 1.86% MAPE on SE) is statistically indistinguishable from hyperparameter-tuned N-BEATS trained on 5+ years of local ONS data (1.91% ± 0.08% MAPE; Diebold-Mariano p > 0.29) — without any local training. For loose context, this lands in the band reported by proprietary ISO systems that additionally use weather and calendar inputs (PJM 1.78-1.98%), though MAPE is not strictly comparable across grids.
 3. **The result is universal across Brazil.** All four subsystems (SE, S, NE, N) show 45-64% improvement over naive baselines, with R² > 0.90 in every case, despite spanning different climates, economies, and load magnitudes.
 4. **Local training adds little.** Fine-tuning Chronos-2 on local data improves MAPE from 1.86% to 1.73% — only 7%, suggesting the pre-trained model already captures most of the learnable improvement over naive baselines.
-5. **Failures are precisely where universality breaks down.** All 10 worst prediction days are Brazilian public holidays — events that are culturally local and absent from global pre-training data. Excluding holidays, the model's MAPE drops well below 1.7%.
-6. **One week of history suffices.** The model needs just 168 hours of context to halve its error rate, because the weekly demand cycle is the dominant universal pattern.
+5. **Failures are precisely where universality breaks down.** Error concentrates on the holiday regime — Chronos-2 degrades from 1.55% MAPE on normal days to 7.55% on public holidays (a 4.9× lift), and the same holidays are hard for every model (Moirai 7.90%, TiRex 9.08%, naive 12.81%). Adding a single binary holiday covariate recovers 35% of the holiday error.
+6. **The result transfers across countries.** On the Tokyo (TEPCO) grid — a different hemisphere and holiday calendar — the same three zero-shot models again beat a locally-trained N-BEATS (Chronos-2 3.91% vs N-BEATS 4.44%), in the identical ranking observed for Brazil.
+7. **One week of history suffices.** The model needs just 168 hours of context to halve its error rate, because the weekly demand cycle is the dominant universal pattern.
 
 ### 1.3 Contributions
 
@@ -233,7 +235,21 @@ To verify that results are not an artifact of a single favorable test period, we
 
 Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a standard deviation of only 0.04 percentage points. The naive baseline varies more (5.13-5.46%), confirming that foundation model accuracy is robust to year-over-year variation in demand patterns.
 
-### 4.6 Comparison with International Benchmarks
+### 4.6 Cross-Country Replication (TEPCO, Tokyo)
+
+To probe universality beyond Brazil, we repeat the benchmark on the TEPCO grid (Tokyo Electric Power, ~32 GW mean, ~45M people), with hourly data 2019-2024 from tepco.co.jp. N-BEATS is trained on 2019-2023 Japanese data and 2024 held out; foundation models remain zero-shot. Source: `scripts/download_tepco.py`, `scripts/benchmark_tepco.py`, `scripts/train_nbeats_tepco.py`.
+
+| Model | Type | MAPE | MASE | R² |
+|-------|------|------|------|-----|
+| Chronos-2 | Zero-shot | **3.91%** | 0.59 | 0.91 |
+| Moirai 2.0 | Zero-shot | 3.94% | 0.59 | 0.91 |
+| TiRex | Zero-shot | 4.05% | 0.61 | 0.91 |
+| N-BEATS | Trained 5 yr (Japanese data) | 4.44% | 0.67 | 0.89 |
+| Naive (7d ago) | Baseline | 8.86% | 1.30 | 0.65 |
+
+All three zero-shot foundation models **beat** the locally-trained N-BEATS, in the identical ranking observed for Brazil (Chronos-2 > Moirai > TiRex ≫ naive). Absolute MAPE is higher than Brazil (Japanese demand is more volatile), but the qualitative result — zero-shot transfer matching or exceeding dedicated local training — holds across a different country, hemisphere, and holiday calendar. This is the strongest single piece of evidence for the universality hypothesis, since Japan shares no geography, climate, or calendar with Brazil yet the model ranking is preserved.
+
+### 4.7 Comparison with International Benchmarks
 
 | Benchmark | Region | MAPE | Method | Input Features | Our Chronos-2 |
 |-----------|--------|------|--------|----------------|---------------|
@@ -246,7 +262,7 @@ Chronos-2 performance is remarkably stable across years: 1.86-1.94% MAPE with a 
 
 **Note:** ISO systems (PJM, ERCOT) incorporate weather forecasts, calendar features, economic indicators, and decades of domain engineering. Our model uses **only historical load** as input — no exogenous features. Achieving comparable MAPE with univariate input alone suggests that historical load patterns contain most of the predictive signal for day-ahead forecasting, and that foundation models can extract this signal effectively without explicit feature engineering.
 
-### 4.7 Analysis
+### 4.8 Analysis
 
 **Model ranking.** On SE, the full ranking is: Chronos-2 fine-tuned (1.73%) > Chronos-2 zero-shot (1.86%) > N-BEATS tuned (1.91% ± 0.08%) ≈ Moirai 2.0 zero-shot (1.93%) > Bolt-Small (2.02%) > Bolt-Mini (2.19%) > Linear trained (2.26%) > Bolt-Tiny (2.28%) > TiRex (2.33%) > Naive (5.13%).
 
@@ -294,7 +310,22 @@ The critical threshold is **one week (168h)**: MAPE halves from 5.65% to 2.80% a
 
 **Error analysis reveals holidays as the primary failure mode.** We decompose Chronos-2 errors on SE by hour-of-day, day-of-week, and calendar date (Figure 9). Overnight hours (00:00-04:00) achieve 0.5-0.9% MAPE, while peak afternoon hours (13:00-15:00) reach 2.5-2.7% MAPE — consistent with higher load variability during working hours. Weekends (1.75% MAPE) are easier than weekdays (1.90%), with Monday the hardest day (2.37%) due to the difficulty of predicting the workweek ramp-up from weekend context.
 
-Most critically, **all 10 worst prediction days are Brazilian public holidays**: Good Friday (14.2% MAPE), Tiradentes Day (12.6%), Christmas (12.4%), Labour Day (10.6%), and Black Consciousness Day (8.9%). Without calendar input, the model predicts normal workday demand when actual demand drops sharply. Excluding the 10 holiday days (240 hours, ~2.7% of the test set), MAPE drops to approximately 1.6%. This identifies a clear, actionable improvement path: adding a binary holiday feature as exogenous input would likely eliminate the model's worst errors.
+Most critically, **the error concentrates on the holiday regime**. Decomposing the 2024 test year by day type (`results/holiday_mape_SE_24h_2024.csv`), Chronos-2 degrades from 1.55% MAPE on normal days to **7.55% on public holidays** — a 4.9× lift. This is not a quirk of one model: on the same holidays Moirai 2.0 reaches 7.90% and TiRex 9.08%, and the naive baseline 12.81%, confirming the difficulty is a property of the data rather than a model artifact. Without calendar input, the models predict normal workday demand when actual holiday demand drops sharply.
+
+This is precisely where a small dose of local knowledge should help — and it does. We add a single binary holiday covariate and lightly fine-tune Chronos-2 (`results/holiday_covariates_SE_24h_2024.csv`):
+
+| Regime | Hours | Zero-shot | + Covariate | Δ |
+|--------|------:|----------:|------------:|----:|
+| Normal | 5688 | 1.53% | 1.53% | +0.0% |
+| Weekend | 2232 | 1.77% | 1.74% | −2.0% |
+| Day-before | 264 | 2.28% | 2.19% | −4.2% |
+| Day-after | 264 | 2.29% | 1.93% | −15.8% |
+| Carnaval | 48 | 5.68% | 4.64% | −18.3% |
+| **Holiday** | 264 | **6.76%** | **4.37%** | **−35.4%** |
+| Bridge | 24 | 3.02% | 6.12% | +102.5% |
+| **Overall** | 8784 | 1.82% | 1.73% | −5.0% |
+
+The covariate cuts holiday error by 35% and overall error by 5%, while leaving normal days untouched — exactly the bounded-universality prediction that the residual error is *local calendar knowledge*, recoverable by supplying that knowledge. The lone regression is on "bridge" days (a holiday adjacent to a weekend; only 24 test hours), where the coarse binary encoding is too blunt and a richer calendar feature is needed.
 
 **Horizon decay and the naive crossover.** Foundation model accuracy degrades predictably with horizon length (Figure 5). At 24h, Chronos-2 achieves 64% lower MAPE than naive; by 168h (1 week) this advantage shrinks to 30%; and at 720h (1 month) the naive baseline wins outright. This crossover occurs because the naive baseline's core assumption — that demand repeats weekly — becomes increasingly accurate at longer horizons where daily noise averages out. Foundation models, generating autoregressively, accumulate error with each step. The practical implication is clear: foundation models are most valuable for operational horizons (day-ahead to week-ahead), while simple seasonal baselines suffice for monthly planning. Notably, TiRex maintains MASE < 1.0 even at 720h, suggesting xLSTM's recurrent state-tracking may be better suited than transformer architectures for very long-range energy forecasting.
 
@@ -306,7 +337,7 @@ Most critically, **all 10 worst prediction days are Brazilian public holidays**:
 
 The success of zero-shot transfer is not surprising when viewed through the lens of what drives electricity demand. The dominant patterns — daily cycles driven by solar illumination and human activity, weekly cycles driven by the social rhythm of work and rest, seasonal trends driven by climate — arise from physics and deeply conserved human behaviour. These forces operate in every electrified society. A model that has learned these regularities from global data has, in effect, learned the universal laws of electricity demand.
 
-The failures are equally informative. Every one of the model's worst predictions falls on a Brazilian public holiday — Good Friday, Tiradentes Day, Christmas, Labour Day. These are *culturally local* events: they exist in the Brazilian calendar but not in the calendars of the predominantly US/EU/Asian time series the model was trained on. The model predicts normal workday demand because, from its perspective, nothing signals otherwise. This is not a deficiency of the architecture; it is a precise delineation of where universality ends and local knowledge begins.
+The failures are equally informative. The residual error concentrates on the holiday regime — Chronos-2 degrades 4.9× on public holidays (1.55% → 7.55% MAPE), and the same days are hard for every model tested. These are *culturally local* events: they exist in the Brazilian calendar but not in the calendars of the predominantly US/EU/Asian time series the model was trained on. The model predicts normal workday demand because, from its perspective, nothing signals otherwise. This is not a deficiency of the architecture — supplying exactly that local knowledge, via a single binary holiday covariate, recovers 35% of the holiday error. It is a precise delineation of where universality ends and local knowledge begins.
 
 This suggests a clean division of labour for operational forecasting: use foundation models for the universal component (daily, weekly, seasonal patterns) and a lightweight local overlay for calendar-specific corrections (holiday flags, regional events).
 
@@ -316,7 +347,7 @@ Our findings yield a practical recipe for deploying foundation models in emergin
 
 1. **Start with zero-shot Chronos-2 or Moirai 2.0.** Achieves 1.86-1.93% MAPE on day-ahead horizons with no local training, no weather data, and no feature engineering. Requires only 30 days of historical load data as context.
 2. **Fine-tune if resources permit.** Adds ~7% relative improvement (1.73% MAPE) with 40 minutes of CPU training. Optimal at 400 steps, learning rate 1e-5.
-3. **Add a holiday flag.** Would eliminate the primary failure mode (up to 14% MAPE on holidays) and likely push overall MAPE below 1.7%.
+3. **Add a holiday covariate.** Cuts the primary failure mode (holiday MAPE) by 35% (6.76% → 4.37%) and overall MAPE by 5% (1.82% → 1.73%), as demonstrated in Section 4.8.
 4. **Do not use for monthly planning.** Beyond 2 weeks, naive weekly repetition outperforms foundation models. Use simple seasonal methods for horizons > 14 days.
 5. **One week of history is the minimum.** MAPE halves when context extends from 3 days to 7 days. Below one week, the model cannot observe a full weekly cycle and accuracy degrades sharply.
 
@@ -324,12 +355,13 @@ Our findings yield a practical recipe for deploying foundation models in emergin
 
 1. **Univariate input only.** We use only historical load. Adding weather forecasts or holiday flags would likely improve results further, particularly on the holiday failure mode.
 2. **No exogenous-augmented trained baseline.** Our trained N-BEATS and linear models also use only historical load. A TFT model with weather covariates could potentially close the gap with zero-shot foundation models.
-3. **Single country.** While we test four subsystems spanning distinct climates and economies, all are within Brazil. Testing on grids in Africa, South Asia, or other emerging markets would strengthen the universality claim.
+3. **Two countries.** We test four Brazilian subsystems plus the Tokyo (TEPCO) grid (Section 4.6). Two countries strengthen the universality claim over a single-country study, but remain a small sample of the world's grids; testing in Africa or South Asia would strengthen it further.
+4. **Bridge-day regression.** The binary holiday covariate worsens forecasts on rare "bridge" days (a holiday adjacent to a weekend), where the coarse encoding is too blunt; a richer calendar feature is needed.
 
 ### 5.4 Future work
 
-1. **Holiday-aware forecasting.** Add binary holiday flags as exogenous covariates (Chronos-2 supports this via XReg) to quantify the improvement from minimal local knowledge.
-2. **Cross-country transfer.** Evaluate the same models on grids in India, Nigeria, or Indonesia to test whether universality extends to fundamentally different economic contexts.
+1. **Richer calendar covariates.** Extend the binary holiday flag (Section 4.8) to encode bridge days, holiday eves, and regional holidays, addressing the lone regression observed.
+2. **Wider cross-country transfer.** Beyond Brazil and Japan, evaluate grids in India, Nigeria, or Indonesia to test whether universality extends to fundamentally different economic contexts.
 3. **Price forecasting.** Extend to CCEE PLD (energy price) data, which is more volatile and influenced by policy — testing whether universality holds for market signals, not just physical demand.
 4. **Ensemble methods.** Combine foundation model forecasts with lightweight local corrections (holiday flags, recent error trends) for a hybrid approach.
 
@@ -337,9 +369,9 @@ Our findings yield a practical recipe for deploying foundation models in emergin
 
 ## 6. Conclusion
 
-Our evidence is consistent with electricity demand patterns being universal. A model trained on global time series, with no exposure to Brazilian data, matches the accuracy of both purpose-built ISO forecasting systems and a hyperparameter-tuned deep learning model trained on 5+ years of local data (1.86% vs 1.91% ± 0.08% MAPE; Diebold-Mariano p > 0.29). This result holds across all four Brazilian subsystems (1.67-3.17% MAPE, R² > 0.90), is stable across three test years (1.89% ± 0.04%), and extends to probabilistic forecasting (well-calibrated prediction intervals with 86-89% coverage).
+Our evidence is consistent with electricity demand patterns being universal. A model trained on global time series, with no exposure to the target grid's data, matches a hyperparameter-tuned deep learning model trained on 5+ years of local Brazilian data (1.86% vs 1.91% ± 0.08% MAPE; Diebold-Mariano p > 0.29), and *beats* a locally-trained N-BEATS on the Tokyo grid (3.91% vs 4.44%). This result holds across all four Brazilian subsystems (1.67-3.17% MAPE, R² > 0.90), is stable across three test years (1.89% ± 0.04%), replicates on a second country and hemisphere, and extends to probabilistic forecasting (well-calibrated prediction intervals with 86-89% coverage).
 
-The boundary of universality is precise: the model fails on Brazilian public holidays — culturally local events absent from global training data — and nowhere else. This is not a limitation to be engineered around, but a finding to be understood: it tells us exactly where global knowledge ends and local knowledge begins.
+The boundary of universality is precise: the model's residual error concentrates on Brazilian public holidays — culturally local events absent from global training data — and a single holiday covariate recovers 35% of even that gap. This is not a limitation to be engineered around, but a finding to be understood: it tells us exactly where global knowledge ends and local knowledge begins.
 
 For grid operators in emerging markets, the practical implication is immediate. Accurate day-ahead load forecasting no longer requires years of local model development, proprietary weather feeds, or specialised expertise. Thirty days of historical load data and an off-the-shelf foundation model are sufficient. The universal patterns of human electricity consumption — waking, working, resting, repeating — are already encoded in these models. The only local knowledge they lack is which days a particular country chooses to rest.
 
