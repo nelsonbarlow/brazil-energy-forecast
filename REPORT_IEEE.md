@@ -1,8 +1,8 @@
 # The Universality of Electricity Demand: Zero-Shot Foundation Models Match Locally-Trained Accuracy on Brazil's Power Grid
 
 **Nelson Barlow**
-*Department of [—], [University]*
-*Email: qdhkbzsmzx@privaterelay.appleid.com*
+*Centro de Informática - Universidade Federal de Pernambuco*
+*email: ngb2@cin.ufpe.br*
 
 > Markdown companion to `REPORT_IEEE.tex` (the IEEE-format submission). All numbers trace to `results/*.csv` on `master`, plus the `asian-market` branch (TEPCO) and `holiday-covariates` branch (holiday regime + covariate experiment).
 
