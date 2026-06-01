@@ -9,3 +9,8 @@ data/
 *.aux
 *.log
 *.out
+
+# Training caches / checkpoints / logs (not versioned)
+results/chronos2-ft-SE/
+results/h3_nbeats_cache/
+darts_logs/
