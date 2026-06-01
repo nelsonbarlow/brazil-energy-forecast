@@ -303,6 +303,17 @@ Overall     & 8784 & 1.82 & 1.73 & $-5.0$ \\
 \end{tabular}
 \end{table}
 
+\textbf{The same covariate hurts a trained model.} A natural control: does the holiday
+flag help the locally-trained N-BEATS as much? We add the identical feature to the tuned
+N-BEATS (3 seeds). It does the \emph{opposite}---overall
+MAPE worsens from 1.91\,\% to 2.20\,\% ($+15$\,\%) and holiday MAPE from 6.00\,\% to
+6.30\,\% ($+5$\,\%). The interpretation sharpens the universality boundary: N-BEATS, trained
+on 5+ years of local data, has \emph{already} absorbed Brazilian holidays implicitly into
+its weights, so an explicit flag is redundant and merely adds noise; the zero-shot model
+never saw those holidays and gains from being told. The same intervention helping the
+foundation model and hurting the trained one is direct evidence that what the foundation
+model lacks---and the flag supplies---is precisely \emph{local calendar knowledge}.
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{error_analysis_SE.png}
