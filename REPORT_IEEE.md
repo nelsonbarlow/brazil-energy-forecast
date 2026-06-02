@@ -5,6 +5,8 @@
 *email: ngb2@cin.ufpe.br*
 
 > Markdown companion to `REPORT_IEEE.tex` (the IEEE-format submission). All numbers trace to `results/*.csv` on `master`, plus the `asian-market` branch (TEPCO) and `holiday-covariates` branch (holiday regime + covariate experiment).
+>
+> **Reproducing this paper:** [`README.md`](README.md) maps every section, table, and figure below to the exact command and result file that produces it — read a section here, run the matching command there.
 
 ---
 
