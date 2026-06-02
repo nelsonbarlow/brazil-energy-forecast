@@ -1,0 +1,298 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+\usetheme{Madrid}
+\usecolortheme{seagull}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{caption}{\raggedright\insertcaption\par}
+
+% --- Speaker notes ---
+% Default build = clean slides only.
+% To export a notes handout, change the next line to:
+%   \setbeameroption{show only notes}
+% and recompile to a separate PDF.
+\setbeamertemplate{note page}{\insertnote}
+
+\definecolor{hl}{HTML}{1A6E5A}
+\newcommand{\hl}[1]{\textcolor{hl}{\textbf{#1}}}
+
+\title[Universality of Electricity Demand]{The Universality of Electricity Demand}
+\subtitle{Zero-Shot Foundation Models Match Locally-Trained Accuracy on Brazil's Power Grid}
+\author{Nelson Barlow}
+\institute{Centro de Informática --- UFPE}
+\date{}
+
+\begin{document}
+
+% ---------- 1. Title (~20s) ----------
+\begin{frame}
+  \titlepage
+\end{frame}
+\note{
+Olá. Meu projeto investiga uma pergunta simples mas com grande impacto prático:
+será que modelos de fundação de séries temporais conseguem prever a demanda de energia
+do Brasil SEM nunca terem sido treinados em dados brasileiros? Eu chamo essa hipótese de
+"universalidade da demanda elétrica". [~20s]
+}
+
+% ---------- 2. The problem (~30s) ----------
+\begin{frame}{O problema: previsão de carga exige dados locais}
+  \begin{itemize}
+    \item Previsão de carga de curto prazo (STLF) sustenta despacho, reservas e o mercado day-ahead.
+    \item Paradigma dominante: \hl{cada concessionária treina seu próprio modelo} com anos de histórico local + clima + calendário.
+    \item Barreira pesada em redes com poucos dados: regiões recém-interligadas, microrredes, países em desenvolvimento.
+  \end{itemize}
+\end{frame}
+\note{
+Hoje, prever carga elétrica significa que cada operador constrói um modelo sob medida,
+treinado em anos de dados locais. Isso funciona, mas é caro e impossível onde não há histórico:
+uma microrrede nova, uma região recém-conectada. A pergunta é: dá pra pular essa etapa? [~30s]
+}
+
+% ---------- 3. Hypothesis (~40s) ----------
+\begin{frame}{A hipótese: universalidade da demanda}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Forças universais} \\(transferem entre redes)
+      \begin{itemize}
+        \item Física de aquecimento/refrigeração
+        \item Ritmo circadiano (pico diurno, vale noturno)
+        \item Ciclo semanal trabalho/descanso
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Forças locais} \\(NÃO transferem)
+      \begin{itemize}
+        \item Feriados nacionais
+        \item Restrições hidrológicas
+        \item Sazonalidade do hemisfério sul
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{1em}
+  \begin{center}
+    \hl{Se um modelo pré-treinado internalizou a parte universal, ele transfere zero-shot}\\
+    e o erro residual fica confinado à parte local.
+  \end{center}
+\end{frame}
+\note{
+A intuição: a demanda elétrica tem duas camadas. Uma universal — física e comportamento humano,
+que produz o mesmo formato de curva em qualquer lugar do mundo. E uma local — feriados, hidrologia,
+estação invertida. Minha hipótese é que um modelo treinado em séries globais já aprendeu a camada
+universal. Então ele deveria acertar zero-shot, e errar só na parte local. Vou testar exatamente isso. [~40s]
+}
+
+% ---------- 4. Setup (~35s) ----------
+\begin{frame}{Dados e modelos}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Dados}
+      \begin{itemize}
+        \item ONS (dados.ons.org.br), CC-BY 4.0
+        \item Horário, 2019--2025, 61.368 linhas
+        \item 4 subsistemas do SIN (SE $\approx$ 55\%)
+        \item Réplica: TEPCO (Tóquio)
+        \item Teste: últimos 365 dias; zero-shot só vê o contexto
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Modelos}
+      \begin{itemize}
+        \item \hl{Zero-shot:} Chronos-2 (120M), Moirai 2.0 (11M), TiRex (35M)
+        \item \hl{Treinados:} N-BEATS (ajustado), Linear, LSTM
+        \item Baseline: Naive (7 dias atrás)
+      \end{itemize}
+      \vspace{0.5em}
+      \footnotesize Sem vazamento: ONS ausente do corpus do Chronos.
+    \end{column}
+  \end{columns}
+\end{frame}
+\note{
+Uso dados horários da ONS, sete anos, os quatro subsistemas do sistema interligado. Comparo três
+modelos de fundação zero-shot — Chronos-2, Moirai e TiRex — contra um N-BEATS ajustado e treinado
+em cinco anos de dados locais, mais baselines. Importante: verifiquei que os dados da ONS NÃO estão
+no corpus de treino do Chronos — não há vazamento. Os zero-shot só enxergam a janela de contexto. [~35s]
+}
+
+% ---------- 5. Main result (~50s) ----------
+\begin{frame}{Resultado principal --- SE, horizonte 24h}
+  \begin{center}
+  \begin{tabular}{llr}
+    \toprule
+    Modelo & Tipo & MAPE \\
+    \midrule
+    Chronos-2 (fine-tuned) & Fine-tuned & 1{,}73\% \\
+    \rowcolor{hl!15} \textbf{Chronos-2} & \textbf{Zero-shot} & \textbf{1{,}86\%} \\
+    Moirai 2.0 & Zero-shot & 1{,}93\% \\
+    N-BEATS (ajustado) & Treinado 5+ anos & 1{,}91\% $\pm$ 0{,}08\% \\
+    TiRex & Zero-shot & 2{,}33\% \\
+    Naive (7 dias) & Baseline & 5{,}13\% \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+  \vspace{0.5em}
+  \begin{center}
+    \hl{Zero-shot Chronos-2 (1,86\%) iguala um N-BEATS treinado em 5 anos (1,91\%)} --- sem treino local.
+  \end{center}
+\end{frame}
+\note{
+Este é o resultado central. No subsistema Sudeste, horizonte de 24 horas: o Chronos-2 zero-shot
+atinge 1,86\% de MAPE. O N-BEATS, treinado em cinco anos de dados locais, fica em 1,91\%. Ou seja,
+o modelo que NUNCA viu dados brasileiros empata com — na verdade, levemente supera — o modelo treinado
+localmente. Todos os modelos de fundação batem o baseline naive de 5,13\% com folga. Fine-tuning leve
+ganha só mais 7\%. [~50s]
+}
+
+% ---------- 6. Statistical tie (~30s) ----------
+\begin{frame}{É um empate estatístico, não sorte}
+  \begin{itemize}
+    \item Teste de \hl{Diebold--Mariano} contra as 3 sementes do N-BEATS: \hl{$p > 0{,}29$} (sem diferença significativa).
+    \item Intervalos de confiança 95\% por bootstrap se sobrepõem (Chronos-2: [1,70\%, 2,04\%]).
+    \item N-BEATS foi devidamente ajustado: grid search (input length $\times$ lr), 3 sementes $\to$ 1,91\% $\pm$ 0,08\%.
+  \end{itemize}
+  \vspace{0.5em}
+  \begin{center}
+    Mesma acurácia. \hl{Um precisa de 5 anos de treino; o outro, de zero.}
+  \end{center}
+\end{frame}
+\note{
+Alguém poderia dizer: 1,86 contra 1,91, é ruído. Exatamente — e é esse o ponto. O teste de
+Diebold-Mariano dá p maior que 0,29, então a diferença NÃO é estatisticamente significativa. Os
+intervalos de confiança se sobrepõem. E garanti que o N-BEATS estava bem ajustado, com busca em
+grade e três sementes. A conclusão honesta é: mesma acurácia. A diferença é que um exigiu cinco
+anos de treino local e o outro, nenhum. [~30s]
+}
+
+% ---------- 7. Generalization (~45s) ----------
+\begin{frame}{Generaliza em todas as dimensões}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}
+        \item \hl{4 subsistemas:} Chronos-2 lidera todos (1,67--3,17\%), R$^2 > 0{,}90$.
+        \item \hl{3 anos de teste:} estável, 1,89\% $\pm$ 0,04\%.
+        \item \hl{Contexto:} limiar de 1 semana; MAPE cai pela metade ao ver um ciclo semanal completo. 30 dias = ótimo.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}
+        \item \hl{Horizonte:} melhor em 24--168h; naive vence só após $\sim$2 semanas.
+        \item \hl{Escala:} família Bolt escala log-linear (Tiny 2,28\% $\to$ Chronos-2 1,86\%).
+        \item \hl{Probabilístico:} bem calibrado; Chronos-2 melhor CRPS, Moirai intervalos mais nítidos.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+\note{
+O resultado não é um acaso do Sudeste. Ele se mantém nos quatro subsistemas, com R-quadrado acima de
+0,90 em todos. Mantém-se em três anos diferentes de teste. Sobre contexto: o modelo precisa de pelo
+menos uma semana de histórico — quando vê um ciclo semanal completo, o erro cai pela metade; 30 dias
+é o ponto ideal. Em horizonte, os modelos de fundação ganham até duas semanas; depois disso, o naive
+volta a vencer. Use para operação de curto prazo. [~45s]
+}
+
+% ---------- 8. Cross-country (~40s) ----------
+\begin{frame}{Réplica entre países: Tóquio (TEPCO)}
+  \begin{center}
+  \begin{tabular}{llr}
+    \toprule
+    Modelo & Tipo & MAPE \\
+    \midrule
+    \rowcolor{hl!15} Chronos-2 & Zero-shot & \textbf{3{,}91\%} \\
+    Moirai 2.0 & Zero-shot & 3{,}94\% \\
+    TiRex & Zero-shot & 4{,}05\% \\
+    N-BEATS & Treinado 5 anos & 4{,}44\% \\
+    Naive (7 dias) & Baseline & 8{,}86\% \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+  \vspace{0.4em}
+  \begin{center}
+    Outro país, \hl{outro hemisfério, outro calendário} --- mesmo ranking.\\
+    Os três zero-shot \hl{vencem} o N-BEATS treinado localmente.
+  \end{center}
+\end{frame}
+\note{
+A evidência mais forte da universalidade: repeti tudo na rede de Tóquio, a TEPCO. País diferente,
+hemisfério diferente, calendário de feriados diferente. E o mesmo padrão aparece: os três modelos
+zero-shot batem o N-BEATS treinado em cinco anos de dados japoneses. O MAPE absoluto é maior porque
+a demanda japonesa é mais volátil, mas o resultado qualitativo se sustenta entre países. Isso é difícil
+de explicar a não ser que exista mesmo uma estrutura universal na demanda. [~40s]
+}
+
+% ---------- 9. When it fails (~40s) ----------
+\begin{frame}{Onde falha: feriados}
+  \begin{itemize}
+    \item Em feriados nacionais brasileiros, o Chronos-2 degrada para \hl{4--5$\times$} o erro de dia normal.
+    \item Motivo: nada no corpus global sinaliza um feriado brasileiro $\to$ ele prevê demanda de dia útil.
+    \item É propriedade \hl{dos dados, não de um modelo}: Moirai 7,9\%, TiRex 9,1\%, naive 12,8\% nos mesmos feriados (vs. $\sim$1,6\% normal).
+  \end{itemize}
+  \vspace{0.5em}
+  \begin{center}
+    Exatamente o previsto: \hl{a fronteira da universalidade é o calendário local.}
+  \end{center}
+\end{frame}
+\note{
+E onde o modelo falha? Exatamente onde a hipótese previu: feriados. Em feriados nacionais, o erro
+do Chronos-2 sobe de cerca de 1,6\% para quatro ou cinco vezes isso. A razão é intuitiva — nada no
+corpus global de treino diz a ele que é feriado no Brasil, então ele prevê um dia útil comum. E não é
+defeito de um modelo só: todos degradam igual, inclusive o naive. Isso confirma a fronteira: o que não
+transfere é o conhecimento de calendário local. [~40s]
+}
+
+% ---------- 10. The fix (~35s) ----------
+\begin{frame}{A correção funciona: 1 covariável de feriado}
+  \begin{center}
+  \begin{tabular}{lrrr}
+    \toprule
+    Regime & Zero-shot & + Covariável & $\Delta$ \\
+    \midrule
+    \rowcolor{hl!15} Feriado & 6{,}76\% & \textbf{4{,}37\%} & \hl{$-$35\%} \\
+    Carnaval & 5{,}68\% & 4{,}64\% & $-$18\% \\
+    Dia seguinte & 2{,}29\% & 1{,}93\% & $-$16\% \\
+    Dia normal & 1{,}53\% & 1{,}53\% & 0\% \\
+    Geral & 1{,}82\% & 1{,}73\% & $-$5\% \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+  \vspace{0.4em}
+  \begin{center}
+    Uma covariável binária de feriado + fine-tuning leve \hl{recupera 35\% do erro de feriado},\\
+    sem tocar nos dias normais.
+  \end{center}
+\end{frame}
+\note{
+E se a falha é falta de conhecimento de calendário, basta fornecer esse conhecimento. Adicionei UMA
+covariável binária de feriado, com fine-tuning leve. O erro de feriado cai 35\%, o Carnaval 18\%, o
+dia seguinte ao feriado 16\% — e os dias normais ficam intactos. Isso fecha o argumento: a fronteira
+da universalidade é conhecimento de calendário, não uma limitação de arquitetura. Forneça o pedaço
+local que falta, e o modelo recupera quase toda a diferença. [~35s]
+}
+
+% ---------- 11. Takeaway (~35s) ----------
+\begin{frame}{Conclusão e receita operacional}
+  \begin{block}{Universalidade limitada da demanda elétrica}
+    Estrutura física e comportamental transfere zero-shot entre redes, anos e países;
+    só o calendário local não transfere --- e uma covariável o recupera.
+  \end{block}
+  \textbf{Receita para redes com poucos dados:}
+  \begin{enumerate}
+    \item Comece zero-shot (Chronos-2, ou Moirai 11M se houver restrição) com $\sim$30 dias de contexto.
+    \item Fine-tune se possível ($\sim$7\% de ganho, 40 min em CPU).
+    \item Adicione covariável binária de feriado.
+    \item Não use além de $\sim$2 semanas de horizonte.
+  \end{enumerate}
+  \vspace{0.3em}
+  \footnotesize Código e dados: \texttt{github.com/nelsonbarlow/brazil-energy-forecast}
+\end{frame}
+\note{
+Em resumo: a demanda elétrica tem uma universalidade, mas com fronteira precisa. A estrutura física
+e comportamental transfere entre redes, anos e até países. Só o calendário local não transfere — e uma
+única covariável o recupera. Para um operador com poucos dados, a receita prática é: comece zero-shot
+com 30 dias de contexto, faça fine-tuning se puder, adicione a covariável de feriado, e não passe de
+duas semanas de horizonte. Previsão day-ahead precisa não exige mais anos de desenvolvimento local.
+Obrigado. Todo o código está no GitHub. [~35s]
+}
+
+\end{document}
